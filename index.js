@@ -1,13 +1,37 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import pg from "pg";
 
+dotenv.config();
+
+const { Pool } = pg;
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// health check
-app.get('/health', (_, res) => res.json({ status: 'ok', time: new Date() }));
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`API running on :${PORT}`));
+// ✅ Root route
+app.get("/", (req, res) => {
+  res.send("Khedme API is running ✅");
+});
+
+// ✅ Pending providers route
+app.get("/api/providers/pending", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM providers WHERE approved = false"
+    );
+    res.status(200).json({ providers: rows });
+  } catch (err) {
+    console.error("[PENDING PROVIDERS ERROR]:", err);
+    res.status(500).json({ message: "Server error while fetching providers" });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
