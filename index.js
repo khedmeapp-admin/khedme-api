@@ -11,7 +11,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ PostgreSQL connection setup
+// ✅ PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -22,7 +22,7 @@ app.get("/", (req, res) => {
   res.send("Khedme API is running ✅");
 });
 
-// ✅ Pending providers route
+// ✅ Pending providers
 app.get("/api/providers/pending", async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -41,6 +41,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-// ✅ Keep container alive on Railway
-setInterval(() => {}, 1000);
-
+// ✅ Prevent Railway from shutting down
+setInterval(() => {
+  console.log("⏳ Keeping container alive...");
+}, 60000);
