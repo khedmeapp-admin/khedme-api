@@ -7,9 +7,11 @@ dotenv.config();
 
 const { Pool } = pg;
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
+// ✅ PostgreSQL connection setup
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -33,5 +35,6 @@ app.get("/api/providers/pending", async (req, res) => {
   }
 });
 
+// ✅ Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
