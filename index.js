@@ -4,25 +4,43 @@ import dotenv from "dotenv";
 import pg from "pg";
 
 dotenv.config();
-
 const { Pool } = pg;
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// ✅ PostgreSQL connection
+// PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
-// ✅ Root route
+// Health check
+app.get("/health", (req, res) => res.json({ status: "ok" }));
+
+// OTP routes
+app.post("/auth/request-otp", async (req, res) => {
+  const { phone, role } = req.body;
+  if (!phone || !phone.startsWith("+961"))
+    return res.status(400).json({ message: "Invalid Lebanese number" });
+
+  // TODO: send real OTP via SMS
+  return res.json({ providerId: "demo-123", message: "OTP sent (demo code: 123456)" });
+});
+
+app.post("/auth/verify-otp", async (req, res) => {
+  const { providerId, otp } = req.body;
+  if (otp !== "123456") return res.status(400).json({ message: "Wrong code" });
+  return res.json({ message: "Provider verified" });
+});
+
+// Root route
 app.get("/", (req, res) => {
   res.send("Khedme API is running ✅");
 });
 
-// ✅ Pending providers
+// Pending providers
 app.get("/api/providers/pending", async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -35,13 +53,11 @@ app.get("/api/providers/pending", async (req, res) => {
   }
 });
 
-// ✅ Start server
+// Start server
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-// ✅ Prevent Railway from shutting down
-setInterval(() => {
-  console.log("⏳ Keeping container alive...");
-}, 60000);
+// Keep Railway alive
+setInterval(() => console.log("⏳ Keeping container alive..."), 60000);
