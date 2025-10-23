@@ -13,8 +13,12 @@ app.use(express.json());
 // PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: {
+    require: true,
+    rejectUnauthorized: false
+  }
 });
+
 
 // Health check
 app.get("/health", (req, res) => res.json({ status: "ok" }));
