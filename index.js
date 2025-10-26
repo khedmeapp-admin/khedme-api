@@ -15,9 +15,15 @@ app.use(cors());
 app.use(express.json());
 
 // ✅ PostgreSQL connection (shared pool)
+import pkg from 'pg';
+const { Pool } = pkg;
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }, // Required for Render + Supabase
+  ssl: {
+    require: true,
+    rejectUnauthorized: false,
+  },
 });
 
 // ✅ Test connection once

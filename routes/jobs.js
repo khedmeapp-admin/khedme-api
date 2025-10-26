@@ -59,4 +59,34 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// ✅ Apply for a job
+router.post("/:id/apply", async (req, res) => {
+  const pool = req.pool;
+  try {
+    const jobId = req.params.id;
+    const { provider_name, provider_phone, message } = req.body;
+
+    if (!provider_name || !provider_phone) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Insert into job_applications
+    const { rows } = await pool.query(
+      `INSERT INTO job_applications (job_id, provider_name, provider_phone, message)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [jobId, provider_name, provider_phone, message || ""]
+    );
+
+    res.status(201).json({
+      message: "Application submitted successfully",
+      application: rows[0],
+    });
+  } catch (err) {
+    console.error("[APPLY JOB ERROR]:", err.message);
+    res.status(500).json({ message: "Server error while applying for job" });
+  }
+});
+
+
 export default router;
