@@ -101,4 +101,24 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// ✅ Get provider by ID
+router.get("/:id", async (req, res) => {
+  const { id } = req.params;
+  const pool = req.pool;
+
+  try {
+    const { rows } = await pool.query("SELECT * FROM providers WHERE id = $1", [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("GET PROVIDER ERROR:", err);
+    res.status(500).json({ message: "Error fetching provider" });
+  }
+});
+
+
 export default router;

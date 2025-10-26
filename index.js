@@ -1,3 +1,5 @@
+import adminRouter from "./routes/admin.js";
+
 // index.js
 import express from "express";
 import cors from "cors";
@@ -34,6 +36,7 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 // ✅ Root
 app.get("/", (req, res) => res.send("Khedme API is running ✅"));
+app.use("/api/admin", adminRouter);
 
 // ✅ Routes
 app.use("/api/jobs", jobsRouter);

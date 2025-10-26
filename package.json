@@ -9,9 +9,11 @@
     "dev": "nodemon --env-file=.env index.js"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
     "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.5"
   },
   "devDependencies": {
@@ -21,9 +23,14 @@
     "node": ">=18.0.0"
   },
   "nodemonConfig": {
-    "watch": ["index.js", "routes"],
+    "watch": [
+      "index.js",
+      "routes"
+    ],
     "ext": "js,json",
-    "ignore": ["node_modules"],
+    "ignore": [
+      "node_modules"
+    ],
     "env": {
       "NODE_ENV": "development"
     }
