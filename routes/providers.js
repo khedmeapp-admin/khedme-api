@@ -42,10 +42,29 @@ router.post("/approve", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ❌ Reject provider by ID (used by admin)
-   Usage: POST /api/providers/reject?id=123
-   This will DELETE the provider row.
+   ✅ Reject provider by ID (mark as rejected)
 --------------------------------------------------- */
+router.post("/reject", async (req, res) => {
+  const pool = req.pool;
+  const { id } = req.query;
+  if (!id) return res.status(400).json({ message: "Missing provider ID" });
+
+  try {
+    const { rowCount } = await pool.query(
+      "UPDATE providers SET rejected = true, approved = false WHERE id = $1",
+      [id]
+    );
+
+    if (rowCount === 0)
+      return res.status(404).json({ message: "Provider not found" });
+
+    res.status(200).json({ message: "Provider rejected successfully" });
+  } catch (err) {
+    console.error("[REJECT PROVIDER ERROR]:", err.message);
+    res.status(500).json({ message: "Error rejecting provider" });
+  }
+});
+
 router.post("/reject", async (req, res) => {
   const pool = req.pool;
   const { id } = req.query;
