@@ -1,4 +1,3 @@
-// routes/jobs.js
 import express from "express";
 const router = express.Router();
 
@@ -19,7 +18,6 @@ router.post("/:id/apply", async (req, res) => {
 
   console.log("📩 Apply Request Body:", req.body);
 
-  // Validation
   if (!provider_id) {
     return res.status(400).json({ message: "Missing provider ID" });
   }
@@ -41,6 +39,29 @@ router.post("/:id/apply", async (req, res) => {
   } catch (err) {
     console.error("❌ Error applying for job:", err.message);
     res.status(500).json({ message: "Server error while applying for job" });
+  }
+});
+
+/* ---------------------------------------------------
+ ✅ Get all applications for a specific job
+--------------------------------------------------- */
+router.get("/:id/applications", async (req, res) => {
+  const pool = req.pool;
+  const jobId = req.params.id;
+
+  try {
+    const query = `
+      SELECT *
+      FROM job_applications
+      WHERE job_id = $1
+      ORDER BY created_at DESC;
+    `;
+    const { rows } = await pool.query(query, [jobId]);
+
+    res.status(200).json({ applications: rows });
+  } catch (err) {
+    console.error("❌ Error fetching job applications:", err.message);
+    res.status(500).json({ message: "Server error while fetching applications" });
   }
 });
 
