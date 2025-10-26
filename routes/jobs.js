@@ -65,4 +65,55 @@ router.get("/:id/applications", async (req, res) => {
   }
 });
 
+/* ---------------------------------------------------
+ ✅ Approve or Reject a Job Application
+--------------------------------------------------- */
+router.post("/applications/:id/approve", async (req, res) => {
+  const pool = req.pool;
+  const appId = req.params.id;
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE job_applications 
+       SET status = 'approved' 
+       WHERE id = $1 
+       RETURNING *;`,
+      [appId]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ message: "Application not found" });
+
+    console.log("✅ Application approved:", rows[0]);
+    res.json({ message: "Application approved ✅", application: rows[0] });
+  } catch (err) {
+    console.error("❌ Error approving application:", err.message);
+    res.status(500).json({ message: "Server error while approving" });
+  }
+});
+
+router.post("/applications/:id/reject", async (req, res) => {
+  const pool = req.pool;
+  const appId = req.params.id;
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE job_applications 
+       SET status = 'rejected' 
+       WHERE id = $1 
+       RETURNING *;`,
+      [appId]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ message: "Application not found" });
+
+    console.log("🚫 Application rejected:", rows[0]);
+    res.json({ message: "Application rejected 🚫", application: rows[0] });
+  } catch (err) {
+    console.error("❌ Error rejecting application:", err.message);
+    res.status(500).json({ message: "Server error while rejecting" });
+  }
+});
+
 export default router;
