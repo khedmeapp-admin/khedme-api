@@ -2,12 +2,12 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import pg from "pg";
+import pkg from "pg";
 import jobsRouter from "./routes/jobs.js";
 
 dotenv.config();
 
-const { Pool } = pg;
+const { Pool } = pkg;
 const app = express();
 
 // ✅ Middleware
@@ -15,9 +15,6 @@ app.use(cors());
 app.use(express.json());
 
 // ✅ PostgreSQL connection (shared pool)
-import pkg from 'pg';
-const { Pool } = pkg;
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
