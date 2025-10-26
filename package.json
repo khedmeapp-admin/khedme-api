@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon --env-file=.env index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -13,7 +14,18 @@
     "express": "^4.19.2",
     "pg": "^8.11.5"
   },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "nodemonConfig": {
+    "watch": ["index.js", "routes"],
+    "ext": "js,json",
+    "ignore": ["node_modules"],
+    "env": {
+      "NODE_ENV": "development"
+    }
   }
 }

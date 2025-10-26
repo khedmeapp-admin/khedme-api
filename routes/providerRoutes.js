@@ -66,4 +66,27 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// ✅ NEW: Get all jobs assigned to a specific provider
+router.get("/:id/jobs", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const query = `
+      SELECT j.*
+      FROM job_applications a
+      JOIN jobs j ON a.job_id = j.id
+      WHERE a.provider_id = $1
+      AND a.status = 'approved'
+      ORDER BY j.created_at DESC
+    `;
+
+    const { rows } = await pool.query(query, [id]);
+
+    res.status(200).json({ jobs: rows });
+  } catch (err) {
+    console.error("[GET PROVIDER JOBS ERROR]:", err);
+    res.status(500).json({ message: "Error fetching provider jobs" });
+  }
+});
+
 export default router;
