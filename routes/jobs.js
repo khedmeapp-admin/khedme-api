@@ -40,4 +40,23 @@ router.get("/all", async (req, res) => {
   }
 });
 
+// ✅ Get a specific job by ID
+router.get("/:id", async (req, res) => {
+  const pool = req.pool; // use pool passed from index.js
+  try {
+    const { id } = req.params;
+
+    const { rows } = await pool.query("SELECT * FROM jobs WHERE id = $1", [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    res.status(200).json({ job: rows[0] });
+  } catch (err) {
+    console.error("[GET JOB BY ID ERROR]:", err.message);
+    res.status(500).json({ message: "Server error while fetching job" });
+  }
+});
+
 export default router;
