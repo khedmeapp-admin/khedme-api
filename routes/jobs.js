@@ -2,10 +2,56 @@ import express from "express";
 const router = express.Router();
 
 /* ---------------------------------------------------
- ✅ TEST ROUTE — to confirm deployment
+ ✅ TEST ROUTE — confirm router is active
 --------------------------------------------------- */
 router.get("/test", (req, res) => {
   res.json({ message: "Jobs router is live ✅" });
+});
+
+/* ---------------------------------------------------
+ ✅ Create a new job
+--------------------------------------------------- */
+router.post("/create", async (req, res) => {
+  const pool = req.pool;
+  const { service, district, description, budget } = req.body;
+
+  if (!service || !district || !description || !budget) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  try {
+    const query = `
+      INSERT INTO jobs (service, district, description, budget, status, created_at)
+      VALUES ($1, $2, $3, $4, 'pending', NOW())
+      RETURNING *;
+    `;
+    const values = [service, district, description, budget];
+    const { rows } = await pool.query(query, values);
+
+    res.status(201).json({
+      message: "Job created successfully ✅",
+      job: rows[0],
+    });
+  } catch (err) {
+    console.error("❌ Error creating job:", err.message);
+    res.status(500).json({ message: "Server error while creating job" });
+  }
+});
+
+/* ---------------------------------------------------
+ ✅ Get all jobs
+--------------------------------------------------- */
+router.get("/all", async (req, res) => {
+  const pool = req.pool;
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM jobs ORDER BY created_at DESC;"
+    );
+    res.status(200).json({ jobs: rows });
+  } catch (err) {
+    console.error("❌ Error fetching jobs:", err.message);
+    res.status(500).json({ message: "Server error while fetching jobs" });
+  }
 });
 
 /* ---------------------------------------------------
@@ -66,7 +112,7 @@ router.get("/:id/applications", async (req, res) => {
 });
 
 /* ---------------------------------------------------
- ✅ Approve or Reject a Job Application
+ ✅ Approve / Reject a job application
 --------------------------------------------------- */
 router.post("/applications/:id/approve", async (req, res) => {
   const pool = req.pool;
