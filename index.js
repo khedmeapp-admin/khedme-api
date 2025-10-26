@@ -17,9 +17,7 @@ app.use(express.json());
 // ✅ PostgreSQL connection (shared pool)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // Required for Render + Supabase
-  },
+  ssl: { rejectUnauthorized: false }, // Required for Render + Supabase
 });
 
 // ✅ Test connection once
@@ -29,15 +27,6 @@ pool
   .catch((err) => console.error("❌ Database connection failed:", err.message))
   .finally(() => console.log("💡 Connection test complete"));
 
-// ✅ Attach pool globally so all routes can use it
-app.use((req, res, next) => {
-  req.pool = pool;
-  next();
-});
-
-// ✅ Routes
-app.use("/api/jobs", jobsRouter);
-
 // ✅ Health check
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
@@ -45,6 +34,16 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 app.get("/", (req, res) => {
   res.send("Khedme API is running ✅");
 });
+
+// ✅ JOB ROUTES (with pool middleware)
+app.use(
+  "/api/jobs",
+  (req, res, next) => {
+    req.pool = pool;
+    next();
+  },
+  jobsRouter
+);
 
 // ✅ OTP demo routes
 app.post("/auth/request-otp", async (req, res) => {
