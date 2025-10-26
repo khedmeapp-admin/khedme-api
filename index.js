@@ -23,12 +23,11 @@ const pool = new Pool({
   },
 });
 
-// ✅ Test connection once
-pool
-  .connect()
-  .then(() => console.log("✅ Connected to Supabase PostgreSQL (SSL enabled)"))
-  .catch((err) => console.error("❌ Database connection failed:", err.message))
-  .finally(() => console.log("💡 Connection test complete"));
+// ✅ Attach pool globally
+app.use((req, res, next) => {
+  req.pool = pool;
+  next();
+});
 
 // ✅ Health check
 app.get("/health", (req, res) => res.json({ status: "ok" }));
@@ -38,15 +37,8 @@ app.get("/", (req, res) => {
   res.send("Khedme API is running ✅");
 });
 
-// ✅ JOB ROUTES (with pool middleware)
-app.use(
-  "/api/jobs",
-  (req, res, next) => {
-    req.pool = pool;
-    next();
-  },
-  jobsRouter
-);
+// ✅ JOB ROUTES
+app.use("/api/jobs", jobsRouter);
 
 // ✅ OTP demo routes
 app.post("/auth/request-otp", async (req, res) => {
@@ -125,7 +117,7 @@ app.get("/api/provider/:id", async (req, res) => {
 setInterval(() => console.log("⏳ Keeping container alive..."), 60000);
 
 // ✅ Start server
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Khedme API running on port ${PORT}`);
 });
