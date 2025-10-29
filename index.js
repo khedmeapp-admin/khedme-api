@@ -1,18 +1,18 @@
-import adminRouter from "./routes/admin.js";
-
 // index.js
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import pkg from "pg";
+import pg from "pg";
 
 // Import routes
+import adminRouter from "./routes/admin.js";
 import jobsRouter from "./routes/jobs.js";
 import providerRouter from "./routes/providers.js";
-import authRouter from "./routes/auth.js"; // 👈 added
+import authRouter from "./routes/auth.js";
+import applyRouter from "./routes/apply.js"; // <-- NEW
 
 dotenv.config();
-const { Pool } = pkg;
+const { Pool } = pg;
 const app = express();
 
 // ✅ Middleware
@@ -22,10 +22,12 @@ app.use(express.json());
 // ✅ PostgreSQL connection (shared pool)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { require: true, rejectUnauthorized: false },
+  ssl: {
+    rejectUnauthorized: false, // ✅ Allows Supabase self-signed SSL certs
+  },
 });
 
-// ✅ Attach pool globally
+// ✅ Attach pool globally so all routes can use it
 app.use((req, res, next) => {
   req.pool = pool;
   next();
@@ -36,14 +38,15 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 // ✅ Root
 app.get("/", (req, res) => res.send("Khedme API is running ✅"));
-app.use("/api/admin", adminRouter);
 
 // ✅ Routes
+app.use("/api/admin", adminRouter);
 app.use("/api/jobs", jobsRouter);
 app.use("/api/providers", providerRouter);
-app.use("/auth", authRouter); // 👈 new clean mount
+app.use("/auth", authRouter);
+app.use("/api/jobs", applyRouter); // <-- NEW LINE
 
-// ✅ Keep container alive (Render)
+// ✅ Keep container alive on Render
 setInterval(() => console.log("⏳ Keeping container alive..."), 60000);
 
 // ✅ Start Server

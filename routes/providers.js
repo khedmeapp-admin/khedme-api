@@ -1,124 +1,160 @@
 // routes/providers.js
 import express from "express";
+import pool from "../db.js"; // PostgreSQL / Supabase connection pool
+
 const router = express.Router();
 
 /* ---------------------------------------------------
    ✅ Get all pending providers (for admin dashboard)
 --------------------------------------------------- */
 router.get("/pending", async (req, res) => {
-  const pool = req.pool;
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM providers WHERE approved = false ORDER BY created_at ASC"
+      "SELECT * FROM providers WHERE status = 'pending' ORDER BY created_at DESC"
     );
-    res.status(200).json({ providers: rows });
-  } catch (err) {
-    console.error("[GET PENDING PROVIDERS ERROR]:", err.message);
-    res.status(500).json({ message: "Error fetching pending providers" });
+    res.json({ providers: rows });
+  } catch (error) {
+    console.error("Error fetching pending providers:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /* ---------------------------------------------------
-   ✅ Approve provider by ID (used by admin)
-   Usage: POST /api/providers/approve?id=123
+   ✅ Approve a provider (admin action)
 --------------------------------------------------- */
 router.post("/approve", async (req, res) => {
-  const pool = req.pool;
-  const { id } = req.query;
-  if (!id) return res.status(400).json({ message: "Missing provider ID" });
-
+  const { id } = req.body;
   try {
-    const { rowCount } = await pool.query(
-      "UPDATE providers SET approved = true WHERE id = $1",
+    const { rows } = await pool.query(
+      "UPDATE providers SET status = 'approved' WHERE id = $1 RETURNING *",
       [id]
     );
-    if (rowCount === 0) return res.status(404).json({ message: "Provider not found" });
-
-    res.status(200).json({ message: "Provider approved successfully" });
-  } catch (err) {
-    console.error("[APPROVE PROVIDER ERROR]:", err.message);
-    res.status(500).json({ message: "Error approving provider" });
+    res.json({ message: "Provider approved ✅", provider: rows[0] });
+  } catch (error) {
+    console.error("Error approving provider:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /* ---------------------------------------------------
-   ✅ Reject provider by ID (mark as rejected)
+   ✅ Reject a provider (admin action)
 --------------------------------------------------- */
 router.post("/reject", async (req, res) => {
-  const pool = req.pool;
-  const { id } = req.query;
-  if (!id) return res.status(400).json({ message: "Missing provider ID" });
-
+  const { id } = req.body;
   try {
-    const { rowCount } = await pool.query(
-      "UPDATE providers SET rejected = true, approved = false WHERE id = $1",
-      [id]
-    );
-
-    if (rowCount === 0)
-      return res.status(404).json({ message: "Provider not found" });
-
-    res.status(200).json({ message: "Provider rejected successfully" });
-  } catch (err) {
-    console.error("[REJECT PROVIDER ERROR]:", err.message);
-    res.status(500).json({ message: "Error rejecting provider" });
-  }
-});
-
-router.post("/reject", async (req, res) => {
-  const pool = req.pool;
-  const { id } = req.query;
-  if (!id) return res.status(400).json({ message: "Missing provider ID" });
-
-  try {
-    const { rowCount } = await pool.query("DELETE FROM providers WHERE id = $1", [id]);
-    if (rowCount === 0) return res.status(404).json({ message: "Provider not found" });
-
-    res.status(200).json({ message: "Provider rejected and removed" });
-  } catch (err) {
-    console.error("[REJECT PROVIDER ERROR]:", err.message);
-    res.status(500).json({ message: "Error rejecting provider" });
+    await pool.query("DELETE FROM providers WHERE id = $1", [id]);
+    res.json({ message: "Provider rejected and removed ❌" });
+  } catch (error) {
+    console.error("Error rejecting provider:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /* ---------------------------------------------------
-   ✅ Get a single provider by ID
-   Usage: GET /api/providers/:id
+   ✅ Get provider profile by ID
 --------------------------------------------------- */
-router.get("/:id", async (req, res) => {
-  const pool = req.pool;
+router.get("/profile/:id", async (req, res) => {
   const { id } = req.params;
-
   try {
     const { rows } = await pool.query("SELECT * FROM providers WHERE id = $1", [id]);
-    if (rows.length === 0)
-      return res.status(404).json({ message: "Provider not found" });
-
-    res.status(200).json(rows[0]);
-  } catch (err) {
-    console.error("[GET PROVIDER ERROR]:", err.message);
-    res.status(500).json({ message: "Error fetching provider" });
-  }
-});
-
-// ✅ Get provider by ID
-router.get("/:id", async (req, res) => {
-  const { id } = req.params;
-  const pool = req.pool;
-
-  try {
-    const { rows } = await pool.query("SELECT * FROM providers WHERE id = $1", [id]);
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "Provider not found" });
-    }
-
+    if (rows.length === 0) return res.status(404).json({ message: "Provider not found" });
     res.json(rows[0]);
-  } catch (err) {
-    console.error("GET PROVIDER ERROR:", err);
-    res.status(500).json({ message: "Error fetching provider" });
+  } catch (error) {
+    console.error("Error fetching provider profile:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
+/* ---------------------------------------------------
+   ✅ Update provider profile info
+--------------------------------------------------- */
+router.post("/profile/update", async (req, res) => {
+  const { id, name, skills, district, bio, available } = req.body;
+
+  if (!id) return res.status(400).json({ message: "Provider ID required" });
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE providers
+       SET name = $2, skills = $3, district = $4, bio = $5, available = $6
+       WHERE id = $1 RETURNING *`,
+      [id, name, skills, district, bio, available]
+    );
+    res.json({ message: "Profile updated ✅", provider: rows[0] });
+  } catch (error) {
+    console.error("Error updating provider profile:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ---------------------------------------------------
+   ✅ Apply for a job
+--------------------------------------------------- */
+router.post("/apply", async (req, res) => {
+  const { job_id, provider_id, message } = req.body;
+
+  if (!job_id || !provider_id)
+    return res.status(400).json({ message: "job_id and provider_id are required" });
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO job_applications (job_id, provider_id, message, status)
+       VALUES ($1, $2, $3, 'pending') RETURNING *`,
+      [job_id, provider_id, message]
+    );
+    res.json({ message: "Application sent ✅", application: rows[0] });
+  } catch (error) {
+    console.error("Error applying for job:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ---------------------------------------------------
+   ✅ Get all applications for a specific provider
+--------------------------------------------------- */
+router.get("/applications/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT ja.*, j.service, j.district, j.budget
+       FROM job_applications ja
+       JOIN jobs j ON ja.job_id = j.id
+       WHERE ja.provider_id = $1
+       ORDER BY ja.created_at DESC`,
+      [id]
+    );
+    res.json({ applications: rows });
+  } catch (error) {
+    console.error("Error fetching provider applications:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ---------------------------------------------------
+   ✅ Update provider profile
+--------------------------------------------------- */
+router.patch("/update", async (req, res) => {
+  const pool = req.pool;
+  const { id, name, service, district } = req.body;
+
+  if (!id) return res.status(400).json({ message: "Missing provider ID" });
+
+  try {
+    const result = await pool.query(
+      "UPDATE providers SET name=$1, service=$2, district=$3 WHERE id=$4 RETURNING *;",
+      [name, service, district, id]
+    );
+    if (result.rowCount === 0)
+      return res.status(404).json({ message: "Provider not found" });
+
+    res.json({
+      message: "Profile updated successfully ✅",
+      provider: result.rows[0],
+    });
+  } catch (err) {
+    console.error("[UPDATE PROVIDER ERROR]:", err.message);
+    res.status(500).json({ message: "Server error updating provider" });
+  }
+});
 
 export default router;
