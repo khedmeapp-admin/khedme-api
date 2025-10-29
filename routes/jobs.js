@@ -7,19 +7,16 @@ const router = express.Router();
 --------------------------------------------------- */
 router.get("/test-db", async (req, res) => {
   const pool = req.pool;
+
   try {
-    const result = await pool.query("SELECT * FROM jobs LIMIT 3;");
-    res.json({
-      success: true,
-      count: result.rows.length,
-      rows: result.rows,
-    });
-  } catch (err) {
-    console.error("❌ Database connection test failed:", err.message);
-    res.status(500).json({ success: false, error: err.message });
+    const result = await pool.query("SELECT NOW()");
+    console.log("✅ Database test result:", result.rows);
+    res.json({ success: true, message: "Database connection successful ✅", time: result.rows[0] });
+  } catch (error) {
+    console.error("❌ Database connection failed:", error);
+    res.json({ success: false, error: error.message || "Unknown error" });
   }
 });
-
 /* ---------------------------------------------------
    ✅ Create new job
 --------------------------------------------------- */
