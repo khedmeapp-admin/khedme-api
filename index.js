@@ -10,7 +10,7 @@ import jobsRouter from "./routes/jobs.js";
 import providerRouter from "./routes/providers.js";
 import authRouter from "./routes/auth.js";
 import applyRouter from "./routes/apply.js";
-import metaRouter from "./routes/meta.js"; // 👈 NEW
+import metaRouter from "./routes/meta.js"; // ✅ Meta route (categories + districts)
 
 dotenv.config();
 const { Pool } = pg;
@@ -26,13 +26,13 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }, // Required for Supabase SSL
 });
 
-// ✅ Attach pool globally so all routes can use it
+// ✅ Attach pool to every request
 app.use((req, res, next) => {
   req.pool = pool;
   next();
 });
 
-// ✅ Health Check
+// ✅ Health check
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 // ✅ Root
@@ -44,11 +44,13 @@ app.use("/api/admin", adminRouter);
 app.use("/api/jobs", jobsRouter);
 app.use("/api/providers", providerRouter);
 app.use("/api/jobs", applyRouter);
-app.use("/api/meta", metaRouter); // 👈 NEW route for categories & districts
+app.use("/api/meta", metaRouter); // ✅ Unified meta endpoint
 
-// ✅ Keep container alive on Render
+// ✅ Keep Render container awake
 setInterval(() => console.log("⏳ Keeping container alive..."), 60000);
 
 // ✅ Start Server
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`🚀 Khedme API running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🚀 Khedme API running on port ${PORT}`)
+);
