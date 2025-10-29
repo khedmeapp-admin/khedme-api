@@ -3,6 +3,24 @@ import express from "express";
 const router = express.Router();
 
 /* ---------------------------------------------------
+   🧪 Test Database Connection
+--------------------------------------------------- */
+router.get("/test-db", async (req, res) => {
+  const pool = req.pool;
+  try {
+    const result = await pool.query("SELECT * FROM jobs LIMIT 3;");
+    res.json({
+      success: true,
+      count: result.rows.length,
+      rows: result.rows,
+    });
+  } catch (err) {
+    console.error("❌ Database connection test failed:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ---------------------------------------------------
    ✅ Create new job
 --------------------------------------------------- */
 router.post("/create", async (req, res) => {
@@ -42,31 +60,6 @@ router.get("/all", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Apply to a job
---------------------------------------------------- */
-router.post("/apply", async (req, res) => {
-  const { job_id, provider_id, message } = req.body;
-  const pool = req.pool; // ✅ use shared pool (SSL fixed globally)
-
-  try {
-    const result = await pool.query(
-      `INSERT INTO job_applications (job_id, provider_id, message, status)
-       VALUES ($1, $2, $3, 'pending')
-       RETURNING *`,
-      [job_id, provider_id, message]
-    );
-
-    res.json({
-      message: "Application submitted successfully ✅",
-      application: result.rows[0],
-    });
-  } catch (err) {
-    console.error("❌ Error applying to job:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* ---------------------------------------------------
    ✅ Provider applies for a job
 --------------------------------------------------- */
 router.post("/apply", async (req, res) => {
@@ -90,7 +83,7 @@ router.post("/apply", async (req, res) => {
       application: rows[0],
     });
   } catch (error) {
-    console.error("Error applying for job:", error);
+    console.error("❌ Error applying for job:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
