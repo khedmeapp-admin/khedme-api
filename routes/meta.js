@@ -1,33 +1,32 @@
-// routes/meta.js
 import express from "express";
 const router = express.Router();
 
-/* -----------------------------
-   ✅ GET all categories
------------------------------ */
+/* ---------------------------------------------------
+   ✅ Get all categories
+--------------------------------------------------- */
 router.get("/categories", async (req, res) => {
-  const pool = req.pool;
   try {
-    const { rows } = await pool.query(
-      "SELECT id, name, name_ar, branch FROM categories ORDER BY id"
+    const pool = req.pool;
+    const result = await pool.query(
+      "SELECT id, name_en, name_ar, branch FROM categories ORDER BY id ASC"
     );
-    res.json({ success: true, categories: rows });
+    res.json(result.rows);
   } catch (error) {
     console.error("❌ Error fetching categories:", error.message);
     res.status(500).json({ error: "Failed to fetch categories" });
   }
 });
 
-/* -----------------------------
-   ✅ GET all districts
------------------------------ */
+/* ---------------------------------------------------
+   ✅ Get all districts
+--------------------------------------------------- */
 router.get("/districts", async (req, res) => {
-  const pool = req.pool;
   try {
-    const { rows } = await pool.query(
-      "SELECT id, name, name_ar FROM districts ORDER BY id"
+    const pool = req.pool;
+    const result = await pool.query(
+      "SELECT id, name_en, name_ar FROM districts ORDER BY id ASC"
     );
-    res.json({ success: true, districts: rows });
+    res.json(result.rows);
   } catch (error) {
     console.error("❌ Error fetching districts:", error.message);
     res.status(500).json({ error: "Failed to fetch districts" });
