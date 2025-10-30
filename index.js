@@ -32,13 +32,28 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ Health check
-app.get("/health", (req, res) => res.json({ status: "ok" }));
+/* ---------------------------------------------------
+   ✅ Health Check Routes
+--------------------------------------------------- */
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", message: "Khedme API is running ✅" });
+});
 
-// ✅ Root
-app.get("/", (req, res) => res.send("Khedme API is running ✅"));
+// For backward compatibility
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", message: "Health check passed ✅" });
+});
 
-// ✅ Routes
+/* ---------------------------------------------------
+   ✅ Root
+--------------------------------------------------- */
+app.get("/", (req, res) => {
+  res.send("Khedme API is running ✅");
+});
+
+/* ---------------------------------------------------
+   ✅ Mount Routes
+--------------------------------------------------- */
 app.use("/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/jobs", jobsRouter);
@@ -46,11 +61,13 @@ app.use("/api/providers", providerRouter);
 app.use("/api/jobs", applyRouter);
 app.use("/api/meta", metaRouter); // ✅ Unified meta endpoint
 
-// ✅ Keep Render container awake
+/* ---------------------------------------------------
+   ♻️ Keep Render container awake
+--------------------------------------------------- */
 setInterval(() => console.log("⏳ Keeping container alive..."), 60000);
 
-// ✅ Start Server
+/* ---------------------------------------------------
+   🚀 Start Server
+--------------------------------------------------- */
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () =>
-  console.log(`🚀 Khedme API running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Khedme API running on port ${PORT}`));
