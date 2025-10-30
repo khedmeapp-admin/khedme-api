@@ -66,46 +66,57 @@ router.get("/profile/:id", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Update provider profile info
+   ✅ Update provider profile (fixed)
 --------------------------------------------------- */
-router.post("/profile/update", async (req, res) => {
-  const { id, name, skills, district, bio, available } = req.body;
+router.patch("/update", async (req, res) => {
+  const { id, name, service, district } = req.body;
 
-  if (!id) return res.status(400).json({ message: "Provider ID required" });
+  if (!id) return res.status(400).json({ message: "Missing provider ID" });
 
   try {
-    const { rows } = await pool.query(
-      `UPDATE providers
-       SET name = $2, skills = $3, district = $4, bio = $5, available = $6
-       WHERE id = $1 RETURNING *`,
-      [id, name, skills, district, bio, available]
+    const result = await pool.query(
+      "UPDATE providers SET name=$1, service=$2, district=$3 WHERE id=$4 RETURNING *;",
+      [name, service, district, id]
     );
-    res.json({ message: "Profile updated ✅", provider: rows[0] });
-  } catch (error) {
-    console.error("Error updating provider profile:", error);
-    res.status(500).json({ error: error.message });
+
+    if (result.rowCount === 0)
+      return res.status(404).json({ message: "Provider not found" });
+
+    res.json({
+      message: "Profile updated successfully ✅",
+      provider: result.rows[0],
+    });
+  } catch (err) {
+    console.error("[UPDATE PROVIDER ERROR]:", err);
+    res.status(500).json({ message: "Server error updating provider" });
   }
 });
 
 /* ---------------------------------------------------
-   ✅ Apply for a job
+   ✅ Apply for a Job
 --------------------------------------------------- */
 router.post("/apply", async (req, res) => {
+  const pool = req.pool; // ✅ use the shared pool injected by index.js
   const { job_id, provider_id, message } = req.body;
 
   if (!job_id || !provider_id)
     return res.status(400).json({ message: "job_id and provider_id are required" });
 
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO job_applications (job_id, provider_id, message, status)
-       VALUES ($1, $2, $3, 'pending') RETURNING *`,
-      [job_id, provider_id, message]
+    const result = await pool.query(
+      `INSERT INTO job_applications (job_id, provider_id, message, status, created_at)
+       VALUES ($1, $2, $3, 'pending', NOW())
+       RETURNING *`,
+      [job_id, provider_id, message || null]
     );
-    res.json({ message: "Application sent ✅", application: rows[0] });
+
+    res.json({
+      message: "Application sent ✅",
+      application: result.rows[0],
+    });
   } catch (error) {
-    console.error("Error applying for job:", error);
-    res.status(500).json({ error: error.message });
+    console.error("❌ Error applying for job:", error.message);
+    res.status(500).json({ message: "Server error applying for job", error: error.message });
   }
 });
 
@@ -127,33 +138,6 @@ router.get("/applications/:id", async (req, res) => {
   } catch (error) {
     console.error("Error fetching provider applications:", error);
     res.status(500).json({ error: error.message });
-  }
-});
-
-/* ---------------------------------------------------
-   ✅ Update provider profile
---------------------------------------------------- */
-router.patch("/update", async (req, res) => {
-  const pool = req.pool;
-  const { id, name, service, district } = req.body;
-
-  if (!id) return res.status(400).json({ message: "Missing provider ID" });
-
-  try {
-    const result = await pool.query(
-      "UPDATE providers SET name=$1, service=$2, district=$3 WHERE id=$4 RETURNING *;",
-      [name, service, district, id]
-    );
-    if (result.rowCount === 0)
-      return res.status(404).json({ message: "Provider not found" });
-
-    res.json({
-      message: "Profile updated successfully ✅",
-      provider: result.rows[0],
-    });
-  } catch (err) {
-    console.error("[UPDATE PROVIDER ERROR]:", err.message);
-    res.status(500).json({ message: "Server error updating provider" });
   }
 });
 
