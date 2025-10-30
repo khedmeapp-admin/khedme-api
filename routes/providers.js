@@ -35,9 +35,13 @@ router.post("/approve", async (req, res) => {
     res.json({ message: "Provider approved ✅", provider: result.rows[0] });
   } catch (err) {
     console.error("❌ Error approving provider:", err.message);
-    res.status(500).json({ message: "Server error approving provider" });
+    res.status(500).json({
+      success: false,
+      message: "Server error approving provider",
+      error: err.message,
+    });
   }
-});
+}); // 🧠 ← You were missing this brace before
 
 /* ---------------------------------------------------
    ✅ Reject a provider (admin action)
