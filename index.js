@@ -42,6 +42,17 @@ app.use((req, res, next) => {
 });
 
 // ---------------------------------------------------
+// Health check routes (for Render + local testing)
+// ---------------------------------------------------
+app.get("/", (_, res) => res.send("Khedme API is running ✅"));
+app.get("/health", (_, res) =>
+  res.json({ success: true, message: "Khedme API is healthy 🚀" })
+);
+app.get("/api/health", (_, res) =>
+  res.json({ success: true, message: "Khedme API is healthy 🚀" })
+);
+
+// ---------------------------------------------------
 // Core routes
 // ---------------------------------------------------
 import adminRouter from "./routes/admin.js";
@@ -49,11 +60,6 @@ import jobsRouter from "./routes/jobs.js";
 import providerRouter from "./routes/providers.js";
 import authRouter from "./routes/auth.js";
 import applyRouter from "./routes/apply.js";
-
-app.get("/", (_, res) => res.send("Khedme API is running ✅"));
-app.get("/api/health", (_, res) =>
-  res.json({ status: "ok", message: "Khedme API is running ✅" })
-);
 
 app.use("/auth", authRouter);
 app.use("/api/admin", adminRouter);
