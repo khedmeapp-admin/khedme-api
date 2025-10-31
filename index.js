@@ -1,73 +1,86 @@
-// index.js
+// ✅ Load environment variables first
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import pg from "pg";
 
-// ✅ Import routes
-import adminRouter from "./routes/admin.js";
-import jobsRouter from "./routes/jobs.js";
-import providerRouter from "./routes/providers.js";
-import authRouter from "./routes/auth.js";
-import applyRouter from "./routes/apply.js";
-import metaRouter from "./routes/meta.js"; // ✅ Meta route (categories + districts)
-
-dotenv.config();
+// ---------------------------------------------------
+// Express setup
+// ---------------------------------------------------
 const { Pool } = pg;
 const app = express();
-
-// ✅ Middleware
 app.use(cors());
 app.use(express.json());
 
-// ✅ PostgreSQL connection (shared pool)
+// ---------------------------------------------------
+// Database connection (SSL enforced for Supabase)
+// ---------------------------------------------------
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }, // Required for Supabase SSL
+  ssl: {
+    require: true,
+    rejectUnauthorized: false,
+  },
 });
 
-// ✅ Attach pool to every request
+(async () => {
+  try {
+    const client = await pool.connect();
+    console.log("✅ Database connection successful");
+    client.release();
+  } catch (err) {
+    console.error("❌ DB test failed:", err.message);
+  }
+})();
+
+// Attach pool to all requests
 app.use((req, res, next) => {
   req.pool = pool;
   next();
 });
 
-/* ---------------------------------------------------
-   ✅ Health Check Routes
---------------------------------------------------- */
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", message: "Khedme API is running ✅" });
-});
+// ---------------------------------------------------
+// Core routes
+// ---------------------------------------------------
+import adminRouter from "./routes/admin.js";
+import jobsRouter from "./routes/jobs.js";
+import providerRouter from "./routes/providers.js";
+import authRouter from "./routes/auth.js";
+import applyRouter from "./routes/apply.js";
 
-// For backward compatibility
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", message: "Health check passed ✅" });
-});
+app.get("/", (_, res) => res.send("Khedme API is running ✅"));
+app.get("/api/health", (_, res) =>
+  res.json({ status: "ok", message: "Khedme API is running ✅" })
+);
 
-/* ---------------------------------------------------
-   ✅ Root
---------------------------------------------------- */
-app.get("/", (req, res) => {
-  res.send("Khedme API is running ✅");
-});
-
-/* ---------------------------------------------------
-   ✅ Mount Routes
---------------------------------------------------- */
 app.use("/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/jobs", jobsRouter);
 app.use("/api/providers", providerRouter);
 app.use("/api/jobs", applyRouter);
-app.use("/api/meta", metaRouter); // ✅ Unified meta endpoint
 
-/* ---------------------------------------------------
-   ♻️ Keep Render container awake
---------------------------------------------------- */
+// ---------------------------------------------------
+// 🪄 Lazy-load meta route AFTER envs are guaranteed loaded
+// ---------------------------------------------------
+const loadMetaRoute = async () => {
+  try {
+    const { default: metaRouter } = await import("./routes/meta.js");
+    app.use("/api/meta", metaRouter);
+    console.log("✅ Meta route loaded successfully");
+  } catch (err) {
+    console.error("❌ Failed to load meta route:", err.message);
+  }
+};
+loadMetaRoute();
+
+// ---------------------------------------------------
+// Keep alive + start server
+// ---------------------------------------------------
 setInterval(() => console.log("⏳ Keeping container alive..."), 60000);
 
-/* ---------------------------------------------------
-   🚀 Start Server
---------------------------------------------------- */
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`🚀 Khedme API running on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () =>
+  console.log(`🚀 Khedme API running on port ${PORT}`)
+);
