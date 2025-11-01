@@ -28,30 +28,31 @@ router.get("/test-db", async (req, res) => {
    ✅ Create new job
 --------------------------------------------------- */
 router.post("/create", async (req, res) => {
-  const { service, district, description, budget } = req.body;
   const pool = req.pool;
+  const { service, district, description, budget } = req.body;
 
   if (!service || !district || !description || !budget) {
-    return res.status(400).json({ success: false, message: "Missing required fields" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Missing required fields" });
   }
 
   try {
     const result = await pool.query(
-      `INSERT INTO jobs (service, district, description, budget, status)
-       VALUES ($1, $2, $3, $4, 'pending')
+      `INSERT INTO jobs (service, district, description, budget, status, created_at)
+       VALUES ($1, $2, $3, $4, 'pending', NOW())
        RETURNING *`,
       [service, district, description, budget]
     );
 
-    console.log("✅ Job created:", result.rows[0]);
-    res.status(201).json({
+    res.json({
       success: true,
-      message: "Job posted successfully ✅",
+      message: "Job created successfully ✅",
       job: result.rows[0],
     });
   } catch (err) {
     console.error("❌ Error creating job:", err.message);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
   }
 });
 

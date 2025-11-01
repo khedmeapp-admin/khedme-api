@@ -25,6 +25,7 @@ const pool = new Pool({
   },
 });
 
+// Test connection
 (async () => {
   try {
     const client = await pool.connect();
@@ -35,14 +36,14 @@ const pool = new Pool({
   }
 })();
 
-// Attach pool to all requests
+// Attach pool to all requests (available as req.pool)
 app.use((req, res, next) => {
   req.pool = pool;
   next();
 });
 
 // ---------------------------------------------------
-// Health check routes (for Render + local testing)
+// Health check routes
 // ---------------------------------------------------
 app.get("/", (_, res) => res.send("Khedme API is running ✅"));
 app.get("/health", (_, res) =>
@@ -53,7 +54,7 @@ app.get("/api/health", (_, res) =>
 );
 
 // ---------------------------------------------------
-// Core routes
+// Core API Routes
 // ---------------------------------------------------
 import adminRouter from "./routes/admin.js";
 import jobsRouter from "./routes/jobs.js";
@@ -61,6 +62,7 @@ import providerRouter from "./routes/providers.js";
 import authRouter from "./routes/auth.js";
 import applyRouter from "./routes/apply.js";
 
+// Mount all routes
 app.use("/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/jobs", jobsRouter);
@@ -68,7 +70,7 @@ app.use("/api/providers", providerRouter);
 app.use("/api/jobs", applyRouter);
 
 // ---------------------------------------------------
-// 🪄 Lazy-load meta route AFTER envs are guaranteed loaded
+// Lazy-load meta route (after env vars are loaded)
 // ---------------------------------------------------
 const loadMetaRoute = async () => {
   try {
@@ -87,6 +89,6 @@ loadMetaRoute();
 setInterval(() => console.log("⏳ Keeping container alive..."), 60000);
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () =>
-  console.log(`🚀 Khedme API running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Khedme API running on port ${PORT}`));
+
+export default app;
