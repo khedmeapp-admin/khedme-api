@@ -5,18 +5,18 @@ import { createClient } from "@supabase/supabase-js";
 const router = express.Router();
 
 /* ---------------------------------------------------
-   🧩 Safe Supabase connection (only if env vars exist)
+   🧩 Safe Supabase connection (Render-friendly)
 --------------------------------------------------- */
 let supabase = null;
 if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
   supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-  console.log("✅ Supabase client initialized");
+  console.log("✅ Supabase client initialized (providers.js)");
 } else {
   console.warn("⚠️ Supabase credentials missing — using PG pool fallback when possible.");
 }
 
 /* ---------------------------------------------------
-   ✅ Get all pending providers (for admin dashboard)
+   ✅ Get all pending providers (Admin Dashboard)
 --------------------------------------------------- */
 router.get("/pending", async (req, res) => {
   try {
@@ -28,11 +28,12 @@ router.get("/pending", async (req, res) => {
 
       if (error) throw error;
       return res.json({ success: true, providers: data });
-    } else {
-      const pool = req.pool;
-      const { rows } = await pool.query("SELECT * FROM providers WHERE approved = false");
-      return res.json({ success: true, providers: rows });
     }
+
+    // fallback to pg pool
+    const pool = req.pool;
+    const { rows } = await pool.query("SELECT * FROM providers WHERE approved = false");
+    res.json({ success: true, providers: rows });
   } catch (err) {
     console.error("❌ Error fetching pending providers:", err.message);
     res.status(500).json({ success: false, message: "Server error fetching providers" });
@@ -103,17 +104,14 @@ router.get("/applications/:id", async (req, res) => {
 router.post("/approve", async (req, res) => {
   const pool = req.pool;
   const id = req.query.id;
-
   if (!id) return res.status(400).json({ success: false, message: "Missing provider ID" });
 
   try {
-    const updateQuery = `
-      UPDATE providers 
-      SET approved = true, status = 'approved'
-      WHERE id = $1 
-      RETURNING *;
-    `;
-    const { rows } = await pool.query(updateQuery, [id]);
+    const { rows } = await pool.query(
+      "UPDATE providers SET approved = true, status = 'approved' WHERE id = $1 RETURNING *;",
+      [id]
+    );
+
     if (rows.length === 0)
       return res.status(404).json({ success: false, message: "Provider not found" });
 
@@ -125,22 +123,19 @@ router.post("/approve", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Reject a provider (mark as rejected, keep record)
+   ✅ Reject a provider (mark as rejected)
 --------------------------------------------------- */
 router.post("/reject", async (req, res) => {
   const pool = req.pool;
   const id = req.query.id;
-
   if (!id) return res.status(400).json({ success: false, message: "Missing provider ID" });
 
   try {
-    const updateQuery = `
-      UPDATE providers 
-      SET approved = false, status = 'rejected'
-      WHERE id = $1 
-      RETURNING *;
-    `;
-    const { rows } = await pool.query(updateQuery, [id]);
+    const { rows } = await pool.query(
+      "UPDATE providers SET approved = false, status = 'rejected' WHERE id = $1 RETURNING *;",
+      [id]
+    );
+
     if (rows.length === 0)
       return res.status(404).json({ success: false, message: "Provider not found" });
 
