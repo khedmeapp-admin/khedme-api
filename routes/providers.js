@@ -12,7 +12,7 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
   supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
   console.log("✅ Supabase client initialized");
 } else {
-  console.warn("⚠️ Supabase credentials missing — pending providers route will use PG fallback if needed.");
+  console.warn("⚠️ Supabase credentials missing — using PG pool fallback when possible.");
 }
 
 /* ---------------------------------------------------
@@ -20,18 +20,13 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
 --------------------------------------------------- */
 router.get("/pending", async (req, res) => {
   try {
-    // ✅ Use Supabase if available, otherwise fallback to Postgres pool
     if (supabase) {
       const { data, error } = await supabase
         .from("providers")
         .select("*")
         .eq("approved", false);
 
-      if (error) {
-        console.error("❌ Supabase error fetching providers:", error.message);
-        return res.status(500).json({ success: false, message: "Supabase error fetching providers" });
-      }
-
+      if (error) throw error;
       return res.json({ success: true, providers: data });
     } else {
       const pool = req.pool;
@@ -39,7 +34,7 @@ router.get("/pending", async (req, res) => {
       return res.json({ success: true, providers: rows });
     }
   } catch (err) {
-    console.error("❌ Server error fetching pending providers:", err.message);
+    console.error("❌ Error fetching pending providers:", err.message);
     res.status(500).json({ success: false, message: "Server error fetching providers" });
   }
 });
@@ -58,7 +53,11 @@ router.post("/apply", async (req, res) => {
       RETURNING *;
     `;
     const { rows } = await pool.query(insertQuery, [job_id, provider_id, message]);
-    res.json({ success: true, message: "Application submitted successfully ✅", application: rows[0] });
+    res.json({
+      success: true,
+      message: "Application submitted successfully ✅",
+      application: rows[0],
+    });
   } catch (error) {
     console.error("❌ Error submitting application:", error.message);
     res.status(500).json({ success: false, message: "Server error submitting application" });
@@ -95,6 +94,60 @@ router.get("/applications/:id", async (req, res) => {
   } catch (error) {
     console.error("❌ Error fetching provider applications:", error.message);
     res.status(500).json({ success: false, message: "Server error fetching applications" });
+  }
+});
+
+/* ---------------------------------------------------
+   ✅ Approve a provider
+--------------------------------------------------- */
+router.post("/approve", async (req, res) => {
+  const pool = req.pool;
+  const id = req.query.id;
+
+  if (!id) return res.status(400).json({ success: false, message: "Missing provider ID" });
+
+  try {
+    const updateQuery = `
+      UPDATE providers 
+      SET approved = true, status = 'approved'
+      WHERE id = $1 
+      RETURNING *;
+    `;
+    const { rows } = await pool.query(updateQuery, [id]);
+    if (rows.length === 0)
+      return res.status(404).json({ success: false, message: "Provider not found" });
+
+    res.json({ success: true, message: "Provider approved ✅", provider: rows[0] });
+  } catch (err) {
+    console.error("❌ Error approving provider:", err.message);
+    res.status(500).json({ success: false, message: "Server error approving provider" });
+  }
+});
+
+/* ---------------------------------------------------
+   ✅ Reject a provider (mark as rejected, keep record)
+--------------------------------------------------- */
+router.post("/reject", async (req, res) => {
+  const pool = req.pool;
+  const id = req.query.id;
+
+  if (!id) return res.status(400).json({ success: false, message: "Missing provider ID" });
+
+  try {
+    const updateQuery = `
+      UPDATE providers 
+      SET approved = false, status = 'rejected'
+      WHERE id = $1 
+      RETURNING *;
+    `;
+    const { rows } = await pool.query(updateQuery, [id]);
+    if (rows.length === 0)
+      return res.status(404).json({ success: false, message: "Provider not found" });
+
+    res.json({ success: true, message: "Provider rejected ✅", provider: rows[0] });
+  } catch (err) {
+    console.error("❌ Error rejecting provider:", err.message);
+    res.status(500).json({ success: false, message: "Server error rejecting provider" });
   }
 });
 
