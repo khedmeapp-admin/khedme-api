@@ -3,38 +3,31 @@ const router = express.Router();
 
 /* ---------------------------------------------------
    ✅ Request OTP (Demo version)
-   - Accepts existing or new providers
-   - Always returns a providerId + OTP message
+   - Creates a new provider if phone not found
+   - Reuses existing one otherwise
+   - Returns providerId and demo OTP message
 --------------------------------------------------- */
 router.post("/request-otp", async (req, res) => {
   const pool = req.pool;
-  const { phone, role } = req.body;
+  const { phone } = req.body;
 
   if (!phone || !phone.startsWith("+961")) {
     return res.status(400).json({ message: "Invalid Lebanese number" });
   }
 
   try {
-    // ✅ Check if provider already exists
-    const existing = await pool.query("SELECT * FROM providers WHERE phone = $1", [phone]);
+    const result = await pool.query(
+      `INSERT INTO providers (full_name, phone, role, approved)
+       VALUES ($1, $2, 'provider', false)
+       ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
+       RETURNING id;`,
+      ['Test Provider', phone]
+    );
 
-    let providerId;
+    const providerId = result.rows[0].id;
+    console.log(`[OTP] Request for ${phone} (ID: ${providerId})`);
 
-    if (existing.rows.length > 0) {
-      // Provider already exists — allow login instead of 409
-      providerId = existing.rows[0].id;
-      console.log(`[OTP] Existing provider login for ${phone} (ID: ${providerId})`);
-    } else {
-      // Create a new provider record if none exists
-      const result = await pool.query(
-        "INSERT INTO providers (phone, role, approved) VALUES ($1, $2, false) RETURNING id;",
-        [phone, role || "provider"]
-      );
-      providerId = result.rows[0].id;
-      console.log(`[OTP] New provider created for ${phone} (ID: ${providerId})`);
-    }
-
-    // ✅ In production, send an SMS here — demo code is static
+    // ✅ In production, you'd send an actual SMS. Demo uses static OTP.
     res.json({ providerId, message: "OTP sent (demo code: 123456)" });
   } catch (err) {
     console.error("[REQUEST OTP ERROR]:", err);
@@ -44,6 +37,7 @@ router.post("/request-otp", async (req, res) => {
 
 /* ---------------------------------------------------
    ✅ Verify OTP (Demo version)
+   - Marks provider as approved after OTP check
 --------------------------------------------------- */
 router.post("/verify-otp", async (req, res) => {
   const pool = req.pool;
