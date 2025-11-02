@@ -21,11 +21,7 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
 router.get("/pending", async (req, res) => {
   try {
     if (supabase) {
-      const { data, error } = await supabase
-        .from("providers")
-        .select("*")
-        .eq("approved", false);
-
+      const { data, error } = await supabase.from("providers").select("*").eq("approved", false);
       if (error) throw error;
       return res.json({ success: true, providers: data });
     }
@@ -36,6 +32,34 @@ router.get("/pending", async (req, res) => {
   } catch (err) {
     console.error("❌ Error fetching pending providers:", err.message);
     res.status(500).json({ success: false, message: "Server error fetching providers" });
+  }
+});
+
+/* ---------------------------------------------------
+   ✅ Get all providers (Admin View)
+--------------------------------------------------- */
+router.get("/all", async (req, res) => {
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("providers")
+        .select("id, full_name, phone, approved, status, category_id, district_id, created_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return res.json({ success: true, providers: data });
+    }
+
+    const pool = req.pool;
+    const query = `
+      SELECT id, full_name, phone, approved, status, category_id, district_id, created_at
+      FROM providers
+      ORDER BY created_at DESC;
+    `;
+    const { rows } = await pool.query(query);
+    res.json({ success: true, providers: rows });
+  } catch (err) {
+    console.error("❌ Error fetching all providers:", err.message);
+    res.status(500).json({ success: false, message: "Server error fetching all providers" });
   }
 });
 
