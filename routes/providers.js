@@ -251,4 +251,76 @@ router.post("/reject", async (req, res) => {
   }
 });
 
+/* ---------------------------------------------------
+   ✅ Update provider profile info
+--------------------------------------------------- */
+router.post("/update", async (req, res) => {
+  const pool = req.pool;
+  const { id, full_name, category_id, district_id, phone } = req.body;
+
+  if (!id) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Missing provider ID" });
+  }
+
+  try {
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    if (full_name) {
+      fields.push(`full_name = $${index++}`);
+      values.push(full_name);
+    }
+    if (category_id) {
+      fields.push(`category_id = $${index++}`);
+      values.push(category_id);
+    }
+    if (district_id) {
+      fields.push(`district_id = $${index++}`);
+      values.push(district_id);
+    }
+    if (phone) {
+      fields.push(`phone = $${index++}`);
+      values.push(phone);
+    }
+
+    if (fields.length === 0) {
+      return res.json({
+        success: false,
+        message: "No fields to update",
+      });
+    }
+
+    // Add ID as the last parameter
+    values.push(id);
+
+    const query = `
+      UPDATE providers
+      SET ${fields.join(", ")}
+      WHERE id = $${index}
+      RETURNING *;
+    `;
+
+    const { rows } = await pool.query(query, values);
+
+    if (rows.length === 0)
+      return res
+        .status(404)
+        .json({ success: false, message: "Provider not found" });
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully ✅",
+      provider: rows[0],
+    });
+  } catch (error) {
+    console.error("❌ Error updating provider profile:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error updating provider" });
+  }
+});
+
 export default router;
