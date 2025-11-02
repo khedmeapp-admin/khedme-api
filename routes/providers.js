@@ -30,7 +30,6 @@ router.get("/pending", async (req, res) => {
       return res.json({ success: true, providers: data });
     }
 
-    // fallback to pg pool
     const pool = req.pool;
     const { rows } = await pool.query("SELECT * FROM providers WHERE approved = false");
     res.json({ success: true, providers: rows });
@@ -41,16 +40,74 @@ router.get("/pending", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Provider applies to a job
+   ✅ Provider applies to a job (Render-safe + duplicate check)
 --------------------------------------------------- */
 router.post("/apply", async (req, res) => {
-  const pool = req.pool;
   const { job_id, provider_id, message } = req.body;
 
+  if (!job_id || !provider_id)
+    return res.status(400).json({ success: false, message: "Missing job_id or provider_id" });
+
   try {
+    // ✅ Prefer Supabase if available (Render)
+    if (supabase) {
+      console.log("🟠 Supabase apply route hit:", { job_id, provider_id, message });
+
+      // Check if already applied
+      const { data: existing, error: checkError } = await supabase
+        .from("job_applications")
+        .select("id")
+        .eq("job_id", job_id)
+        .eq("provider_id", provider_id)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+      if (existing)
+        return res.json({
+          success: false,
+          message: "You have already applied for this job ❗",
+        });
+
+      // Insert new application
+      const { data, error } = await supabase
+        .from("job_applications")
+        .insert([
+          {
+            job_id,
+            provider_id,
+            message: message || "No message provided",
+            status: "pending",
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return res.json({
+        success: true,
+        message: "Application submitted successfully ✅",
+        application: data,
+      });
+    }
+
+    // 🧩 Local fallback using PG pool
+    const pool = req.pool;
+
+    // Prevent duplicates locally
+    const { rows: existingRows } = await pool.query(
+      "SELECT id FROM job_applications WHERE job_id = $1 AND provider_id = $2",
+      [job_id, provider_id]
+    );
+    if (existingRows.length > 0)
+      return res.json({
+        success: false,
+        message: "You have already applied for this job ❗",
+      });
+
     const insertQuery = `
-      INSERT INTO job_applications (job_id, provider_id, message)
-      VALUES ($1, $2, $3)
+      INSERT INTO job_applications (job_id, provider_id, message, status)
+      VALUES ($1, $2, $3, 'pending')
       RETURNING *;
     `;
     const { rows } = await pool.query(insertQuery, [job_id, provider_id, message]);
@@ -99,6 +156,54 @@ router.get("/applications/:id", async (req, res) => {
 });
 
 /* ---------------------------------------------------
+   ✅ Update provider availability status
+--------------------------------------------------- */
+router.post("/update-status", async (req, res) => {
+  const { provider_id, available } = req.body;
+
+  if (!provider_id || available === undefined)
+    return res.status(400).json({ success: false, message: "Missing provider_id or availability" });
+
+  try {
+    // ✅ Prefer Supabase if available
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("providers")
+        .update({ available })
+        .eq("id", provider_id)
+        .select("id, available")
+        .single();
+
+      if (error) throw error;
+      return res.json({
+        success: true,
+        message: "Provider status updated ✅",
+        provider: data,
+      });
+    }
+
+    // 🧩 Local fallback using PG pool
+    const pool = req.pool;
+    const { rows } = await pool.query(
+      "UPDATE providers SET available = $1 WHERE id = $2 RETURNING id, available",
+      [available, provider_id]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ success: false, message: "Provider not found" });
+
+    res.json({
+      success: true,
+      message: "Provider status updated ✅",
+      provider: rows[0],
+    });
+  } catch (error) {
+    console.error("❌ Error updating provider status:", error);
+    res.status(500).json({ success: false, message: "Server error updating provider status" });
+  }
+});
+
+/* ---------------------------------------------------
    ✅ Approve a provider
 --------------------------------------------------- */
 router.post("/approve", async (req, res) => {
@@ -123,7 +228,7 @@ router.post("/approve", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Reject a provider (mark as rejected)
+   ✅ Reject a provider
 --------------------------------------------------- */
 router.post("/reject", async (req, res) => {
   const pool = req.pool;
