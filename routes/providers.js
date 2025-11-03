@@ -76,4 +76,39 @@ router.post("/availability", async (req, res) => {
   }
 });
 
+/* ---------------------------------------------------
+   ✅ Fetch provider's job applications
+--------------------------------------------------- */
+router.get("/applications/:id", async (req, res) => {
+  try {
+    const providerId = req.params.id;
+
+    const query = `
+      SELECT 
+        ja.id AS application_id,
+        ja.message,
+        ja.status,
+        ja.created_at,
+        j.id AS job_id,
+        j.service,
+        j.description,
+        j.district,
+        j.budget
+      FROM job_applications ja
+      JOIN jobs j ON ja.job_id = j.id
+      WHERE ja.provider_id = $1
+      ORDER BY ja.created_at DESC;
+    `;
+
+    const { rows } = await pool.query(query, [providerId]);
+    res.json({ success: true, applications: rows });
+  } catch (error) {
+    console.error("❌ Error fetching provider applications:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error fetching applications",
+    });
+  }
+});
+
 export default router;
