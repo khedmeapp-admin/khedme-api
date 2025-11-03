@@ -333,6 +333,32 @@ router.post("/update", async (req, res) => {
     console.error("❌ Error updating provider profile:", error);
     res.status(500).json({ success: false, message: "Server error updating provider" });
   }
+
+/* ---------------------------------------------------
+   ✅ Toggle provider availability
+--------------------------------------------------- */
+router.post("/availability", async (req, res) => {
+  const { provider_id, is_available } = req.body;
+
+  if (!provider_id)
+    return res.status(400).json({ success: false, message: "Missing provider_id" });
+
+  try {
+    const pool = req.app.get("pool");
+    await pool.query(
+      "UPDATE providers SET is_available = $1 WHERE id = $2",
+      [is_available, provider_id]
+    );
+
+    res.json({
+      success: true,
+      message: `Availability updated to ${is_available ? "Available ✅" : "Unavailable ❌"}`
+    });
+  } catch (error) {
+    console.error("Error updating availability:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 });
+
 
 export default router;
