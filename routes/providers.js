@@ -194,7 +194,7 @@ router.post("/reject", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Get all applications by provider ID
+   ✅ Get all applications by provider ID (fixed)
 --------------------------------------------------- */
 router.get("/applications/:id", async (req, res) => {
   const pool = req.app.get("pool");
@@ -202,9 +202,18 @@ router.get("/applications/:id", async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `SELECT ja.id, j.service, j.description, j.district, j.budget, ja.status, ja.created_at
+      `SELECT 
+         ja.id,
+         ja.job_id,
+         ja.status,
+         ja.message,
+         ja.created_at,
+         j.service,
+         j.description,
+         j.district,
+         j.budget
        FROM job_applications ja
-       JOIN jobs j ON ja.job_id = j.id
+       LEFT JOIN jobs j ON ja.job_id = j.id
        WHERE ja.provider_id = $1
        ORDER BY ja.created_at DESC`,
       [id]
@@ -212,8 +221,8 @@ router.get("/applications/:id", async (req, res) => {
 
     res.json({ success: true, applications: rows });
   } catch (error) {
-    console.error("Error fetching applications:", error.message);
-    res.status(500).json({ success: false, message: "Failed to load applications ❌" });
+    console.error("❌ Error fetching provider applications:", error);
+    res.status(500).json({ success: false, message: "Failed to load applications ❌", error: error.message });
   }
 });
 
