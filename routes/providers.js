@@ -193,4 +193,28 @@ router.post("/reject", async (req, res) => {
   }
 });
 
+/* ---------------------------------------------------
+   ✅ Get all applications by provider ID
+--------------------------------------------------- */
+router.get("/applications/:id", async (req, res) => {
+  const pool = req.app.get("pool");
+  const { id } = req.params;
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT ja.id, j.service, j.description, j.district, j.budget, ja.status, ja.created_at
+       FROM job_applications ja
+       JOIN jobs j ON ja.job_id = j.id
+       WHERE ja.provider_id = $1
+       ORDER BY ja.created_at DESC`,
+      [id]
+    );
+
+    res.json({ success: true, applications: rows });
+  } catch (error) {
+    console.error("Error fetching applications:", error.message);
+    res.status(500).json({ success: false, message: "Failed to load applications ❌" });
+  }
+});
+
 export default router;
