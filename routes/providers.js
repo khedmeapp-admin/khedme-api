@@ -85,43 +85,111 @@ router.post("/update", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Upload Profile Picture
+   ✅ Upload Provider Profile Picture + Save to DB
 --------------------------------------------------- */
 router.post("/upload-profile", upload.single("image"), async (req, res) => {
   try {
     const { provider_id } = req.body;
     const file = req.file;
 
-    if (!provider_id || !file)
-      return res.status(400).json({ success: false, message: "Missing provider_id or image" });
+    if (!provider_id || !file) {
+      return res.status(400).json({ success: false, message: "Missing provider_id or image file" });
+    }
 
-    const filePath = `providers/${provider_id}.jpg`;
+    const fileExt = path.extname(file.originalname);
+    const filePath = `providers/${provider_id}${fileExt}`;
+    const fileBuffer = file.buffer;
 
-    // 🟠 Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
+    // ✅ Upload to Supabase Storage
+    const { data, error } = await supabase.storage
       .from("profile_pics")
-      .upload(filePath, file.buffer, {
+      .upload(filePath, fileBuffer, {
         contentType: file.mimetype,
         upsert: true,
       });
 
-    if (uploadError) throw uploadError;
+    if (error) throw error;
 
-    // 🟢 Get public URL
-    const { data } = supabase.storage.from("profile_pics").getPublicUrl(filePath);
-    const imageUrl = data.publicUrl;
+    // ✅ Get public URL
+    const { data: publicURL } = supabase.storage.from("profile_pics").getPublicUrl(filePath);
+    const imageUrl = publicURL.publicUrl;
 
-    // 🟢 Save to DB
-    await pool.query("UPDATE providers SET profile_image = $1 WHERE id = $2", [imageUrl, provider_id]);
+    // ✅ Save image URL in DB
+    const { rows } = await pool.query(
+      "UPDATE providers SET profile_image = $1 WHERE id = $2 RETURNING id, full_name, phone, profile_image;",
+      [imageUrl, provider_id]
+    );
 
     res.json({
       success: true,
-      message: "Profile picture uploaded successfully ✅",
-      image_url: imageUrl,
+      message: "Profile picture uploaded and saved successfully ✅",
+      provider: rows[0],
     });
   } catch (error) {
-    console.error("❌ Error uploading profile picture:", error);
-    res.status(500).json({ success: false, message: "Server error uploading image" });
+    console.error("❌ Upload profile error:", error);
+    res.status(500).json({ success: false, message: "Server error uploading profile picture" });
+  }
+});
+
+/* ---------------------------------------------------
+   ✅ Get all pending providers (for admin dashboard)
+--------------------------------------------------- */
+router.get("/pending", async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM providers WHERE status = 'pending' ORDER BY id ASC");
+    res.json({ success: true, providers: rows });
+  } catch (error) {
+    console.error("❌ Error fetching pending providers:", error);
+    res.status(500).json({ success: false, message: "Server error fetching pending providers" });
+  }
+});
+
+/* ---------------------------------------------------
+   ✅ Approve Provider
+--------------------------------------------------- */
+router.post("/approve", async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ success: false, message: "Provider ID is required" });
+
+    const { rows } = await pool.query(
+      `UPDATE providers
+       SET status = 'approved', approved = TRUE
+       WHERE id = $1
+       RETURNING id, full_name, phone, status, approved;`,
+      [id]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ success: false, message: "Provider not found" });
+
+    res.json({ success: true, message: "Provider approved successfully ✅", provider: rows[0] });
+  } catch (error) {
+    console.error("❌ Error approving provider:", error);
+    res.status(500).json({ success: false, message: "Server error approving provider" });
+  }
+});
+
+/* ---------------------------------------------------
+   ❌ Reject Provider
+--------------------------------------------------- */
+router.post("/reject", async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ success: false, message: "Provider ID is required" });
+
+    const { rows } = await pool.query(
+      "DELETE FROM providers WHERE id = $1 RETURNING id, phone;",
+      [id]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ success: false, message: "Provider not found" });
+
+    res.json({ success: true, message: "Provider rejected and removed ❌", provider: rows[0] });
+  } catch (error) {
+    console.error("❌ Error rejecting provider:", error);
+    res.status(500).json({ success: false, message: "Server error rejecting provider" });
   }
 });
 

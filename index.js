@@ -1,6 +1,5 @@
-// ✅ Load environment variables first
-import dotenv from "dotenv";
-dotenv.config();
+// ✅ Load .env first (even before other imports)
+import "./loadEnv.js";
 
 import express from "express";
 import cors from "cors";
