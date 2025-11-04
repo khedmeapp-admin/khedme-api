@@ -35,11 +35,8 @@ const pool = new Pool({
   }
 })();
 
-// Attach pool to all requests (available as req.pool)
-app.use((req, res, next) => {
-  req.pool = pool;
-  next();
-});
+// ✅ Attach pool globally (available via req.app.get("pool"))
+app.set("pool", pool);
 
 // ---------------------------------------------------
 // Health check routes
@@ -61,7 +58,7 @@ import providerRouter from "./routes/providers.js";
 import authRouter from "./routes/auth.js";
 import applyRouter from "./routes/apply.js";
 
-// Mount all routes
+// ✅ Mount all routes
 app.use("/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/jobs", jobsRouter);
