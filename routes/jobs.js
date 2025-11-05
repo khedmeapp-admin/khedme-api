@@ -1,15 +1,22 @@
 // routes/jobs.js
 import express from "express";
+import pkg from "pg";
+const { Pool } = pkg;
+
 const router = express.Router();
+
+// 🧩 Create a single pool connection (shared)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
 /* ---------------------------------------------------
    🧪 Test Database Connection
 --------------------------------------------------- */
 router.get("/test-db", async (req, res) => {
-  const pool = req.pool;
   try {
     const result = await pool.query("SELECT NOW()");
-    console.log("✅ Database test result:", result.rows);
     res.json({
       success: true,
       message: "Database connection successful ✅",
@@ -17,10 +24,7 @@ router.get("/test-db", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Database connection failed:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message || "Unknown error",
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -28,7 +32,6 @@ router.get("/test-db", async (req, res) => {
    ✅ Create new job
 --------------------------------------------------- */
 router.post("/create", async (req, res) => {
-  const pool = req.pool;
   const { service, district, description, budget } = req.body;
 
   if (!service || !district || !description || !budget) {
@@ -60,14 +63,12 @@ router.post("/create", async (req, res) => {
    ✅ Fetch all jobs
 --------------------------------------------------- */
 router.get("/all", async (req, res) => {
-  const pool = req.pool;
   try {
     const result = await pool.query("SELECT * FROM jobs ORDER BY created_at DESC");
-    console.log(`📦 Returned ${result.rows.length} jobs`);
     res.json({ success: true, jobs: result.rows });
   } catch (err) {
     console.error("❌ Error fetching jobs:", err.message);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
   }
 });
 
@@ -76,8 +77,6 @@ router.get("/all", async (req, res) => {
 --------------------------------------------------- */
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
-  const pool = req.pool;
-
   try {
     const result = await pool.query("SELECT * FROM jobs WHERE id = $1", [id]);
     if (result.rows.length === 0)
@@ -94,7 +93,6 @@ router.get("/:id", async (req, res) => {
    ✅ Provider applies for a job
 --------------------------------------------------- */
 router.post("/apply", async (req, res) => {
-  const pool = req.pool;
   const { job_id, provider_id, message } = req.body;
 
   if (!job_id || !provider_id) {
@@ -112,7 +110,6 @@ router.post("/apply", async (req, res) => {
       [job_id, provider_id, message || null]
     );
 
-    console.log("✅ Job application created:", rows[0]);
     res.json({
       success: true,
       message: "Application submitted successfully ✅",
@@ -123,6 +120,7 @@ router.post("/apply", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Internal server error",
+      error: error.message,
     });
   }
 });
