@@ -1,18 +1,14 @@
+// routes/providers.js
 import express from "express";
-import pkg from "pg";
 import multer from "multer";
+import path from "path";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import pool from "../db.js"; // ✅ Unified database connection
+
 dotenv.config();
 
-const { Pool } = pkg;
 const router = express.Router();
-
-// ✅ PostgreSQL connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes("supabase") ? { rejectUnauthorized: false } : false,
-});
 
 // ✅ Supabase client for file upload
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -40,7 +36,8 @@ router.get("/all", async (req, res) => {
 router.post("/availability", async (req, res) => {
   try {
     const { provider_id, is_available } = req.body;
-    if (!provider_id) return res.status(400).json({ success: false, message: "Missing provider_id" });
+    if (!provider_id)
+      return res.status(400).json({ success: false, message: "Missing provider_id" });
 
     const result = await pool.query(
       "UPDATE providers SET available = $1 WHERE id = $2 RETURNING id, full_name, phone, available;",
@@ -62,12 +59,13 @@ router.post("/availability", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Update Provider Profile (name, category, district)
+   ✅ Update Provider Profile
 --------------------------------------------------- */
 router.post("/update", async (req, res) => {
   try {
     const { id, full_name, category_id, district_id } = req.body;
-    if (!id) return res.status(400).json({ success: false, message: "Provider ID is required" });
+    if (!id)
+      return res.status(400).json({ success: false, message: "Provider ID is required" });
 
     const { rows } = await pool.query(
       `UPDATE providers
@@ -85,7 +83,7 @@ router.post("/update", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Upload Provider Profile Picture + Save to DB
+   ✅ Upload Provider Profile Picture
 --------------------------------------------------- */
 router.post("/upload-profile", upload.single("image"), async (req, res) => {
   try {
@@ -93,7 +91,9 @@ router.post("/upload-profile", upload.single("image"), async (req, res) => {
     const file = req.file;
 
     if (!provider_id || !file) {
-      return res.status(400).json({ success: false, message: "Missing provider_id or image file" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing provider_id or image file" });
     }
 
     const fileExt = path.extname(file.originalname);
@@ -101,14 +101,14 @@ router.post("/upload-profile", upload.single("image"), async (req, res) => {
     const fileBuffer = file.buffer;
 
     // ✅ Upload to Supabase Storage
-    const { data, error } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("profile_pics")
       .upload(filePath, fileBuffer, {
         contentType: file.mimetype,
         upsert: true,
       });
 
-    if (error) throw error;
+    if (uploadError) throw uploadError;
 
     // ✅ Get public URL
     const { data: publicURL } = supabase.storage.from("profile_pics").getPublicUrl(filePath);
@@ -136,7 +136,9 @@ router.post("/upload-profile", upload.single("image"), async (req, res) => {
 --------------------------------------------------- */
 router.get("/pending", async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM providers WHERE status = 'pending' ORDER BY id ASC");
+    const { rows } = await pool.query(
+      "SELECT * FROM providers WHERE status = 'pending' ORDER BY id ASC"
+    );
     res.json({ success: true, providers: rows });
   } catch (error) {
     console.error("❌ Error fetching pending providers:", error);
@@ -150,7 +152,8 @@ router.get("/pending", async (req, res) => {
 router.post("/approve", async (req, res) => {
   try {
     const { id } = req.body;
-    if (!id) return res.status(400).json({ success: false, message: "Provider ID is required" });
+    if (!id)
+      return res.status(400).json({ success: false, message: "Provider ID is required" });
 
     const { rows } = await pool.query(
       `UPDATE providers
@@ -176,12 +179,12 @@ router.post("/approve", async (req, res) => {
 router.post("/reject", async (req, res) => {
   try {
     const { id } = req.body;
-    if (!id) return res.status(400).json({ success: false, message: "Provider ID is required" });
+    if (!id)
+      return res.status(400).json({ success: false, message: "Provider ID is required" });
 
-    const { rows } = await pool.query(
-      "DELETE FROM providers WHERE id = $1 RETURNING id, phone;",
-      [id]
-    );
+    const { rows } = await pool.query("DELETE FROM providers WHERE id = $1 RETURNING id, phone;", [
+      id,
+    ]);
 
     if (rows.length === 0)
       return res.status(404).json({ success: false, message: "Provider not found" });
@@ -194,10 +197,9 @@ router.post("/reject", async (req, res) => {
 });
 
 /* ---------------------------------------------------
-   ✅ Get all applications by provider ID (fixed)
+   ✅ Get all applications by provider ID
 --------------------------------------------------- */
 router.get("/applications/:id", async (req, res) => {
-  const pool = req.app.get("pool");
   const { id } = req.params;
 
   try {
@@ -222,7 +224,11 @@ router.get("/applications/:id", async (req, res) => {
     res.json({ success: true, applications: rows });
   } catch (error) {
     console.error("❌ Error fetching provider applications:", error);
-    res.status(500).json({ success: false, message: "Failed to load applications ❌", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to load applications ❌",
+      error: error.message,
+    });
   }
 });
 

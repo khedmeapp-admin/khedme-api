@@ -1,15 +1,8 @@
 // routes/jobs.js
 import express from "express";
-import pkg from "pg";
-const { Pool } = pkg;
+import pool from "../db.js"; // ✅ Use centralized DB connection
 
 const router = express.Router();
-
-// 🧩 Create a single pool connection (shared)
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
 
 /* ---------------------------------------------------
    🧪 Test Database Connection
@@ -55,7 +48,11 @@ router.post("/create", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Error creating job:", err.message);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
   }
 });
 
@@ -64,11 +61,17 @@ router.post("/create", async (req, res) => {
 --------------------------------------------------- */
 router.get("/all", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM jobs ORDER BY created_at DESC");
+    const result = await pool.query(
+      "SELECT * FROM jobs ORDER BY created_at DESC"
+    );
     res.json({ success: true, jobs: result.rows });
   } catch (err) {
     console.error("❌ Error fetching jobs:", err.message);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
   }
 });
 
@@ -80,7 +83,9 @@ router.get("/:id", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM jobs WHERE id = $1", [id]);
     if (result.rows.length === 0)
-      return res.status(404).json({ success: false, message: "Job not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Job not found" });
 
     res.json({ success: true, job: result.rows[0] });
   } catch (err) {
