@@ -1,162 +1,115 @@
-// D:\Khedme\Khedme-api\routes\admin.js
+// backend/routes/admin.js – admin dashboard data + provider approval (zero raw keys)
 import express from "express";
-import jwt from "jsonwebtoken";
-import multer from "multer";
-import pool from "../db.js"; // ✅ Centralized DB connection
-import supabase from "../supabaseClient.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
-const upload = multer();
 
-// ---------------------------------------------------
-// 🔐 Admin Login (Static Credentials for Now)
-// ---------------------------------------------------
-const ADMIN_EMAIL = "admin@khedme.com";
-const ADMIN_PASSWORD = "123456";
-const JWT_SECRET = "supersecretkey123";
+/* ---------- helpers ---------- */
+const adminOnly = (req, res, next) => {
+  if (req.user.role !== "admin") return res.status(403).json({ success: false, message: "Admin only" });
+  next();
+};
 
-router.post("/login", (req, res) => {
-  const { email, password } = req.body;
-
-  if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-    const token = jwt.sign({ email, role: "admin" }, JWT_SECRET, {
-      expiresIn: "2h",
-    });
-    return res.json({ success: true, token });
-  }
-
-  res.status(401).json({ success: false, message: "Invalid admin credentials ❌" });
+/* ---------- users ---------- */
+router.get("/users", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  const { rows } = await pool.query(
+    "SELECT id, full_name, email, phone, role, created_at FROM users ORDER BY created_at DESC"
+  );
+  res.json({ success: true, users: rows });
 });
 
-// ---------------------------------------------------
-// 📊 Admin Stats — Jobs, Providers, Clients, Applications
-// ---------------------------------------------------
-router.get("/stats", async (req, res) => {
-  try {
-    const [jobs, providers, pending, clients, applications] = await Promise.all([
-      pool.query("SELECT COUNT(*) FROM jobs"),
-      pool.query("SELECT COUNT(*) FROM providers"),
-      pool.query("SELECT COUNT(*) FROM providers WHERE status = 'pending'"),
-      pool.query("SELECT COUNT(*) FROM clients"),
-      pool.query("SELECT COUNT(*) FROM job_applications"),
-    ]);
-
-    const stats = {
-      totalJobs: Number(jobs.rows[0].count),
-      totalProviders: Number(providers.rows[0].count),
-      pendingProviders: Number(pending.rows[0].count),
-      totalClients: Number(clients.rows[0].count),
-      totalApplications: Number(applications.rows[0].count),
-    };
-
-    res.json({ success: true, stats });
-  } catch (error) {
-    console.error("❌ Error fetching admin stats:", error.message);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch admin stats ❌",
-    });
-  }
+router.delete("/users/:id", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
+  res.json({ success: true, message: "User deleted" });
 });
 
-// ---------------------------------------------------
-// 🏙️ Bulk City Import — Insert Districts
-// ---------------------------------------------------
-router.post("/cities/import", async (req, res) => {
-  try {
-    const { cities } = req.body;
-    if (!Array.isArray(cities) || cities.length === 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No cities provided" });
-    }
-
-    const inserts = cities.map((name) => ({
-      name,
-      name_ar: name, // temporary duplication
-    }));
-
-    const { data, error } = await supabase.from("districts").insert(inserts);
-    if (error) throw error;
-
-    res.json({ success: true, message: `${data.length} cities added ✅` });
-  } catch (error) {
-    console.error("❌ Error importing cities:", error.message);
-    res.status(500).json({ success: false, message: "Failed to import cities" });
-  }
+/* ---------- jobs ---------- */
+router.get("/jobs", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  const { rows } = await pool.query(`
+    SELECT j.id, j.title, j.price, j.currency, j.status, j.created_at,
+           u.full_name as client_name
+    FROM jobs j
+    JOIN users u ON j.client_id = u.id
+    ORDER BY j.created_at DESC
+  `);
+  res.json({ success: true, jobs: rows });
 });
 
-// ---------------------------------------------------
-// 🧩 Category Management (Insert/Update)
-// ---------------------------------------------------
-router.post("/categories/update", async (req, res) => {
-  try {
-    const { categories } = req.body;
-    if (!Array.isArray(categories) || categories.length === 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No categories provided" });
-    }
-
-    const inserts = categories.map((c) => ({
-      name: c.name,
-      name_ar: c.name_ar || c.name,
-      branch: c.branch || "On-site",
-    }));
-
-    const { data, error } = await supabase
-      .from("categories")
-      .upsert(inserts, { onConflict: "name" });
-
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      message: "Categories updated successfully ✅",
-      data,
-    });
-  } catch (error) {
-    console.error("❌ Error updating categories:", error.message);
-    res.status(500).json({
-      success: false,
-      message: "Failed to update categories",
-    });
-  }
+/* ---------- disputes ---------- */
+router.get("/disputes", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  const { rows } = await pool.query(`
+    SELECT d.id, d.reason, d.status, d.created_at,
+           u1.full_name as complainant_name,
+           u2.full_name as defendant_name
+    FROM disputes d
+    JOIN users u1 ON d.complainant_id = u1.id
+    JOIN users u2 ON d.defendant_id = u2.id
+    ORDER BY d.created_at DESC
+  `);
+  res.json({ success: true, disputes: rows });
 });
 
-// ---------------------------------------------------
-// 🧾 Upload Wish Money QR (image → Supabase Storage)
-// ---------------------------------------------------
-router.post("/upload-qr", upload.single("qr"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No file uploaded" });
-    }
+/* ---------- providers (pending) ---------- */
+router.get("/providers", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  const { rows } = await pool.query(`
+    SELECT p.id, p.status, p.created_at, u.full_name, u.email, u.district
+    FROM providers p
+    JOIN users u ON p.user_id = u.id
+    ORDER BY p.created_at DESC
+  `);
+  res.json({ success: true, providers: rows });
+});
 
-    const fileBuffer = req.file.buffer;
-    const fileName = `qr_${Date.now()}.png`;
+router.post("/approve-provider", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  const { providerId } = req.body;
+  await pool.query("UPDATE providers SET status = 'approved' WHERE id = $1", [providerId]);
+  res.json({ success: true });
+});
 
-    const { data, error } = await supabase.storage
-      .from("qr_uploads")
-      .upload(fileName, fileBuffer, { contentType: "image/png" });
+router.post("/reject-provider", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  const { providerId } = req.body;
+  await pool.query("UPDATE providers SET status = 'rejected' WHERE id = $1", [providerId]);
+  res.json({ success: true });
+});
 
-    if (error) throw error;
+/* ---------- ads (keep existing) ---------- */
+router.get("/ads", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  const { rows } = await pool.query("SELECT * FROM ads ORDER BY created_at DESC");
+  res.json({ success: true, ads: rows });
+});
 
-    const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/qr_uploads/${fileName}`;
-    res.json({
-      success: true,
-      message: "QR uploaded successfully ✅",
-      url: publicUrl,
-    });
-  } catch (error) {
-    console.error("❌ QR upload error:", error.message);
-    res.status(500).json({
-      success: false,
-      message: "Failed to upload QR",
-    });
-  }
+router.post("/ads", authMiddleware, adminOnly, async (req, res) => {
+  const { title, image_url, link_url, start_date, end_date } = req.body;
+  const pool = req.app.get("pool");
+  const { rows } = await pool.query(
+    "INSERT INTO ads (title, image_url, link_url, start_date, end_date) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+    [title, image_url, link_url, start_date, end_date]
+  );
+  res.json({ success: true, ad: rows[0] });
+});
+
+router.put("/ads/:id", authMiddleware, adminOnly, async (req, res) => {
+  const { title, image_url, link_url, start_date, end_date } = req.body;
+  const pool = req.app.get("pool");
+  const { rows } = await pool.query(
+    `UPDATE ads SET title=$1, image_url=$2, link_url=$3, start_date=$4, end_date=$5 WHERE id=$6 RETURNING *`,
+    [title, image_url, link_url, start_date, end_date, req.params.id]
+  );
+  res.json({ success: true, ad: rows[0] });
+});
+
+router.delete("/ads/:id", authMiddleware, adminOnly, async (req, res) => {
+  const pool = req.app.get("pool");
+  await pool.query("DELETE FROM ads WHERE id = $1", [req.params.id]);
+  res.json({ success: true, message: "Ad deleted" });
 });
 
 export default router;

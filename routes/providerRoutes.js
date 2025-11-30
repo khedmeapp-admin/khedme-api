@@ -1,91 +1,95 @@
+// routes/providers.js
 import express from "express";
-import pg from "pg";
-import dotenv from "dotenv";
+import supabase from "../config/supabaseClient.js";
 
-dotenv.config();
-const { Pool } = pg;
 const router = express.Router();
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    require: true,
-    rejectUnauthorized: false,
-  },
-});
-
-// ✅ Get all pending providers (used by admin dashboard)
+// GET /api/providers/pending
 router.get("/pending", async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      "SELECT * FROM providers WHERE approved = FALSE ORDER BY created_at ASC"
-    );
-    res.status(200).json({ providers: rows });
+    const { data, error } = await supabase
+      .from("providers")
+      .select("*, users(email, full_name, phone)")
+      .eq("status", "pending");
+
+    if (error) throw error;
+
+    res.json({ success: true, providers: data });
   } catch (err) {
-    console.error("[GET PENDING PROVIDERS ERROR]:", err);
-    res.status(500).json({ message: "Error fetching pending providers" });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ✅ Approve a provider by ID
+// POST /api/providers/approve
 router.post("/approve", async (req, res) => {
-  const { id } = req.query;
-  if (!id) {
-    return res.status(400).json({ message: "Missing provider ID" });
-  }
-
   try {
-    const { rowCount } = await pool.query(
-      "UPDATE providers SET approved = TRUE WHERE id = $1",
-      [id]
-    );
+    const { provider_id } = req.body;
+    if (!provider_id)
+      return res.json({ success: false, message: "provider_id is required" });
 
-    if (rowCount === 0) {
-      return res.status(404).json({ message: "Provider not found" });
-    }
+    const { error } = await supabase
+      .from("providers")
+      .update({ status: "approved" })
+      .eq("id", provider_id);
 
-    res.status(200).json({ message: "Provider approved successfully" });
+    if (error) throw error;
+
+    res.json({ success: true });
   } catch (err) {
-    console.error("[APPROVE PROVIDER ERROR]:", err);
-    res.status(500).json({ message: "Error approving provider" });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ✅ Get a single provider by ID
-router.get("/:id", async (req, res) => {
-  const { id } = req.params;
+// POST /api/providers/reject
+router.post("/reject", async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM providers WHERE id = $1", [id]);
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "Provider not found" });
-    }
-    res.status(200).json(rows[0]);
+    const { provider_id } = req.body;
+    if (!provider_id)
+      return res.json({ success: false, message: "provider_id is required" });
+
+    const { error } = await supabase
+      .from("providers")
+      .update({ status: "rejected" })
+      .eq("id", provider_id);
+
+    if (error) throw error;
+
+    res.json({ success: true });
   } catch (err) {
-    console.error("[GET PROVIDER ERROR]:", err);
-    res.status(500).json({ message: "Error fetching provider" });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ✅ NEW: Get all jobs assigned to a specific provider
-router.get("/:id/jobs", async (req, res) => {
-  const { id } = req.params;
-
+// GET /api/providers/applications/:id
+router.get("/applications/:id", async (req, res) => {
   try {
-    const query = `
-      SELECT j.*
-      FROM job_applications a
-      JOIN jobs j ON a.job_id = j.id
-      WHERE a.provider_id = $1
-      AND a.status = 'approved'
-      ORDER BY j.created_at DESC
-    `;
+    const providerId = req.params.id;
 
-    const { rows } = await pool.query(query, [id]);
+    const { data, error } = await supabase
+      .from("job_applications")
+      .select("*, jobs(title, description, district)")
+      .eq("provider_id", providerId);
 
-    res.status(200).json({ jobs: rows });
+    if (error) throw error;
+
+    res.json({ success: true, applications: data });
   } catch (err) {
-    console.error("[GET PROVIDER JOBS ERROR]:", err);
-    res.status(500).json({ message: "Error fetching provider jobs" });
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/providers/all
+router.get("/all", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("providers")
+      .select("*, users(email, full_name)");
+
+    if (error) throw error;
+
+    res.json({ success: true, providers: data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

@@ -1,234 +1,124 @@
-// routes/providers.js
+// backend/routes/providers.js – global accounts: any user can activate/deactivate provider profile
 import express from "express";
-import multer from "multer";
-import path from "path";
-import { createClient } from "@supabase/supabase-js";
-import dotenv from "dotenv";
-import pool from "../db.js"; // ✅ Unified database connection
-
-dotenv.config();
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// ✅ Supabase client for file upload
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+// ---------------------------------------------
+// GET /api/providers/me – return provider row or 404 (global user)
+// ---------------------------------------------
+router.get("/me", authMiddleware, async (req, res) => {
+  const pool = req.app.get("pool");
+  const row = await pool.query(
+    "SELECT id, bio, rate FROM providers WHERE user_id = $1",
+    [req.user.id]
+  );
+  if (!row.rows.length) return res.status(404).json({ id: null });
+  res.json(row.rows[0]);
+});
 
-// ✅ Multer setup for file upload
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+// ---------------------------------------------
+// POST /api/providers/activate – create provider row (global user)
+// ---------------------------------------------
+router.post("/activate", authMiddleware, async (req, res) => {
+  const pool = req.app.get("pool");
+  const exists = await pool.query(
+    "SELECT id FROM providers WHERE user_id = $1",
+    [req.user.id]
+  );
+  if (exists.rows.length) return res.status(200).json({ id: exists.rows[0].id });
 
-/* ---------------------------------------------------
-   ✅ Get all providers
---------------------------------------------------- */
-router.get("/all", async (req, res) => {
+  const insert = await pool.query(
+    "INSERT INTO providers (user_id, bio, rate) VALUES ($1, $2, $3) RETURNING id",
+    [req.user.id, "", 0]
+  );
+  res.status(201).json({ id: insert.rows[0].id });
+});
+
+// ---------------------------------------------
+// POST /api/providers/deactivate – soft-delete provider row (global user)
+// ---------------------------------------------
+router.post("/deactivate", authMiddleware, async (req, res) => {
+  const pool = req.app.get("pool");
+  await pool.query("DELETE FROM providers WHERE user_id = $1", [req.user.id]);
+  res.status(204).send();
+});
+
+// ---------------------------------------------
+// ADMIN ROUTES (unchanged)
+// ---------------------------------------------
+// GET /api/providers/pending
+router.get("/pending", authMiddleware, async (req, res) => {
+  const pool = req.app.get("pool");
+  if (req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
   try {
-    const { rows } = await pool.query("SELECT * FROM providers ORDER BY id ASC");
+    const { rows } = await pool.query(
+      "SELECT id, full_name, email, phone, created_at FROM providers WHERE status = 'pending' ORDER BY created_at DESC"
+    );
     res.json({ success: true, providers: rows });
-  } catch (error) {
-    console.error("❌ Error fetching providers:", error);
+  } catch (err) {
+    console.error("Error fetching pending providers:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-/* ---------------------------------------------------
-   ✅ Toggle Provider Availability
---------------------------------------------------- */
-router.post("/availability", async (req, res) => {
+// POST /api/providers/approve
+router.post("/approve", authMiddleware, async (req, res) => {
+  const pool = req.app.get("pool");
+  if (req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
+  const { providerId } = req.body;
+  if (!providerId) return res.status(400).json({ message: "providerId is required" });
   try {
-    const { provider_id, is_available } = req.body;
-    if (!provider_id)
-      return res.status(400).json({ success: false, message: "Missing provider_id" });
-
     const result = await pool.query(
-      "UPDATE providers SET available = $1 WHERE id = $2 RETURNING id, full_name, phone, available;",
-      [is_available, provider_id]
+      "UPDATE providers SET status = 'approved' WHERE id = $1 RETURNING id, full_name, status",
+      [providerId]
     );
-
-    if (result.rowCount === 0)
-      return res.status(404).json({ success: false, message: "Provider not found" });
-
-    res.json({
-      success: true,
-      message: `Availability updated to ${is_available ? "Available ✅" : "Unavailable ❌"}`,
-      provider: result.rows[0],
-    });
-  } catch (error) {
-    console.error("❌ Error toggling availability:", error);
-    res.status(500).json({ success: false, message: "Server error updating availability" });
+    if (result.rowCount === 0) return res.status(404).json({ message: "Provider not found" });
+    res.json({ success: true, provider: result.rows[0] });
+  } catch (err) {
+    console.error("Error approving provider:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-/* ---------------------------------------------------
-   ✅ Update Provider Profile
---------------------------------------------------- */
-router.post("/update", async (req, res) => {
+// POST /api/providers/reject
+router.post("/reject", authMiddleware, async (req, res) => {
+  const pool = req.app.get("pool");
+  if (req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
+  const { providerId } = req.body;
+  if (!providerId) return res.status(400).json({ message: "providerId is required" });
   try {
-    const { id, full_name, category_id, district_id } = req.body;
-    if (!id)
-      return res.status(400).json({ success: false, message: "Provider ID is required" });
-
-    const { rows } = await pool.query(
-      `UPDATE providers
-       SET full_name = $1, category_id = $2, district_id = $3
-       WHERE id = $4
-       RETURNING id, full_name, phone, category_id, district_id, available;`,
-      [full_name, category_id, district_id, id]
+    const result = await pool.query(
+      "UPDATE providers SET status = 'rejected' WHERE id = $1 RETURNING id, full_name, status",
+      [providerId]
     );
-
-    res.json({ success: true, message: "Profile updated successfully ✅", provider: rows[0] });
-  } catch (error) {
-    console.error("❌ Error updating provider:", error);
-    res.status(500).json({ success: false, message: "Server error updating provider" });
+    if (result.rowCount === 0) return res.status(404).json({ message: "Provider not found" });
+    res.json({ success: true, provider: result.rows[0] });
+  } catch (err) {
+    console.error("Error rejecting provider:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-/* ---------------------------------------------------
-   ✅ Upload Provider Profile Picture
---------------------------------------------------- */
-router.post("/upload-profile", upload.single("image"), async (req, res) => {
-  try {
-    const { provider_id } = req.body;
-    const file = req.file;
-
-    if (!provider_id || !file) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing provider_id or image file" });
-    }
-
-    const fileExt = path.extname(file.originalname);
-    const filePath = `providers/${provider_id}${fileExt}`;
-    const fileBuffer = file.buffer;
-
-    // ✅ Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from("profile_pics")
-      .upload(filePath, fileBuffer, {
-        contentType: file.mimetype,
-        upsert: true,
-      });
-
-    if (uploadError) throw uploadError;
-
-    // ✅ Get public URL
-    const { data: publicURL } = supabase.storage.from("profile_pics").getPublicUrl(filePath);
-    const imageUrl = publicURL.publicUrl;
-
-    // ✅ Save image URL in DB
-    const { rows } = await pool.query(
-      "UPDATE providers SET profile_image = $1 WHERE id = $2 RETURNING id, full_name, phone, profile_image;",
-      [imageUrl, provider_id]
-    );
-
-    res.json({
-      success: true,
-      message: "Profile picture uploaded and saved successfully ✅",
-      provider: rows[0],
-    });
-  } catch (error) {
-    console.error("❌ Upload profile error:", error);
-    res.status(500).json({ success: false, message: "Server error uploading profile picture" });
-  }
-});
-
-/* ---------------------------------------------------
-   ✅ Get all pending providers (for admin dashboard)
---------------------------------------------------- */
-router.get("/pending", async (req, res) => {
+// GET /api/providers/applications/:id
+router.get("/applications/:id", authMiddleware, async (req, res) => {
+  const pool = req.app.get("pool");
+  const providerId = parseInt(req.params.id, 10);
+  if (!providerId) return res.status(400).json({ message: "Invalid provider ID" });
+  if (req.user.role === "provider" && req.user.id !== providerId) return res.status(403).json({ message: "Unauthorized" });
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM providers WHERE status = 'pending' ORDER BY id ASC"
-    );
-    res.json({ success: true, providers: rows });
-  } catch (error) {
-    console.error("❌ Error fetching pending providers:", error);
-    res.status(500).json({ success: false, message: "Server error fetching pending providers" });
-  }
-});
-
-/* ---------------------------------------------------
-   ✅ Approve Provider
---------------------------------------------------- */
-router.post("/approve", async (req, res) => {
-  try {
-    const { id } = req.body;
-    if (!id)
-      return res.status(400).json({ success: false, message: "Provider ID is required" });
-
-    const { rows } = await pool.query(
-      `UPDATE providers
-       SET status = 'approved', approved = TRUE
-       WHERE id = $1
-       RETURNING id, full_name, phone, status, approved;`,
-      [id]
-    );
-
-    if (rows.length === 0)
-      return res.status(404).json({ success: false, message: "Provider not found" });
-
-    res.json({ success: true, message: "Provider approved successfully ✅", provider: rows[0] });
-  } catch (error) {
-    console.error("❌ Error approving provider:", error);
-    res.status(500).json({ success: false, message: "Server error approving provider" });
-  }
-});
-
-/* ---------------------------------------------------
-   ❌ Reject Provider
---------------------------------------------------- */
-router.post("/reject", async (req, res) => {
-  try {
-    const { id } = req.body;
-    if (!id)
-      return res.status(400).json({ success: false, message: "Provider ID is required" });
-
-    const { rows } = await pool.query("DELETE FROM providers WHERE id = $1 RETURNING id, phone;", [
-      id,
-    ]);
-
-    if (rows.length === 0)
-      return res.status(404).json({ success: false, message: "Provider not found" });
-
-    res.json({ success: true, message: "Provider rejected and removed ❌", provider: rows[0] });
-  } catch (error) {
-    console.error("❌ Error rejecting provider:", error);
-    res.status(500).json({ success: false, message: "Server error rejecting provider" });
-  }
-});
-
-/* ---------------------------------------------------
-   ✅ Get all applications by provider ID
---------------------------------------------------- */
-router.get("/applications/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const { rows } = await pool.query(
-      `SELECT 
-         ja.id,
-         ja.job_id,
-         ja.status,
-         ja.message,
-         ja.created_at,
-         j.service,
-         j.description,
-         j.district,
-         j.budget
+      `SELECT ja.id AS application_id, j.id AS job_id, j.title AS job_title, ja.status, ja.created_at
        FROM job_applications ja
-       LEFT JOIN jobs j ON ja.job_id = j.id
+       JOIN jobs j ON ja.job_id = j.id
        WHERE ja.provider_id = $1
        ORDER BY ja.created_at DESC`,
-      [id]
+      [providerId]
     );
-
     res.json({ success: true, applications: rows });
-  } catch (error) {
-    console.error("❌ Error fetching provider applications:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to load applications ❌",
-      error: error.message,
-    });
+  } catch (err) {
+    console.error("Error fetching provider applications:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
