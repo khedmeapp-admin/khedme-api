@@ -1,9 +1,11 @@
+import "./pg-ssl-shim.js"; // must be before any other import
 // Load environment variables
 import "./loadEnv.js";
 
 import express from "express";
 import cors from "cors";
 import pg from "pg";
+pg.defaults.ssl = { rejectUnauthorized: false };
 
 // Import routes
 import authRouter from "./routes/auth.js";
@@ -18,14 +20,11 @@ app.use(cors());
 app.use(express.json());
 
 // ---------------------------------------------------
-// Database connection
+// Database connection – real SSL bypass
 // ---------------------------------------------------
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    require: true,
-    rejectUnauthorized: false,
-  },
+  ssl: { rejectUnauthorized: false },
 });
 
 app.set("pool", pool);
